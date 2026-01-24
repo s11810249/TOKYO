@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2026東京自由行</title>
+    <title>東京分帳神器 V3 (還款管理版)</title>
     
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -68,6 +68,9 @@
         const App = () => {
             // Views: dashboard, addFriend, addExpense, editExpense, friendDetail, allExpenses, addRepayment
             const [view, setView] = useState('dashboard');
+            // *** FIX: Moved tab state here to top level ***
+            const [tab, setTab] = useState('debt'); // 'debt' or 'repayment'
+            
             const [selectedFriendId, setSelectedFriendId] = useState(null);
             const [editingExpenseId, setEditingExpenseId] = useState(null);
             const [editingRepaymentId, setEditingRepaymentId] = useState(null);
@@ -309,7 +312,8 @@
                                         return (
                                             <div 
                                                 key={friend.id}
-                                                onClick={() => { setSelectedFriendId(friend.id); setView('friendDetail'); }}
+                                                // *** FIX: Reset tab to 'debt' when clicking friend ***
+                                                onClick={() => { setSelectedFriendId(friend.id); setTab('debt'); setView('friendDetail'); }}
                                                 className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center active:bg-gray-50 cursor-pointer border border-transparent hover:border-indigo-100"
                                             >
                                                 <div className="flex items-center gap-3">
@@ -552,7 +556,7 @@
             // View: Friend Detail (Tabs: Expense / Repayment)
             if (view === 'friendDetail' && selectedFriendId) {
                 const friend = friends.find(f => f.id === selectedFriendId);
-                const [tab, setTab] = useState('debt'); // 'debt' or 'repayment'
+                // *** Removed nested useState here ***
 
                 // Debt List
                 const myExpenses = expenses.filter(e => e.payerIds.includes(selectedFriendId)).map(e => ({
@@ -749,4 +753,3 @@
     </script>
 </body>
 </html>
-
