@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>東京公費分帳神器 (防虧錢版)</title>
+    <title>2026東京自由行</title>
     
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -18,6 +18,9 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f3f4f6; }
         .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        /* 隱藏滾動條但保持功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body>
@@ -26,14 +29,15 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // --- 內建圖示組件 (解決 Lucide CDN 相容性問題) ---
-        const IconWrapper = ({ size = 24, children, className }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
+        // --- 內建圖示組件 (SVG) ---
+        const IconWrapper = ({ size = 24, children, className, onClick }) => (
+            <svg onClick={onClick} xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
         );
 
         const Icons = {
             Plus: (props) => <IconWrapper {...props}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></IconWrapper>,
             Trash2: (props) => <IconWrapper {...props}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></IconWrapper>,
+            Edit: (props) => <IconWrapper {...props}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></IconWrapper>,
             Users: (props) => <IconWrapper {...props}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></IconWrapper>,
             Receipt: (props) => <IconWrapper {...props}><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z"></path><line x1="12" y1="6" x2="12" y2="6.01"></line><line x1="12" y1="10" x2="12" y2="10.01"></line><line x1="12" y1="14" x2="12" y2="14.01"></line><line x1="12" y1="18" x2="12" y2="18.01"></line></IconWrapper>,
             Plane: (props) => <IconWrapper {...props}><path d="M22 2 11 13"></path><path d="m22 2-7 20-4-9-9-4 20-7z"></path></IconWrapper>,
@@ -46,6 +50,8 @@
             ArrowLeft: (props) => <IconWrapper {...props}><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></IconWrapper>,
             Share: (props) => <IconWrapper {...props}><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></IconWrapper>,
             Check: (props) => <IconWrapper {...props}><polyline points="20 6 9 17 4 12"></polyline></IconWrapper>,
+            List: (props) => <IconWrapper {...props}><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></IconWrapper>,
+            Wallet: (props) => <IconWrapper {...props}><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"></path></IconWrapper>,
         };
 
         const CATEGORIES = [
@@ -60,198 +66,235 @@
         ];
 
         const App = () => {
+            // Views: dashboard, addFriend, addExpense, editExpense, friendDetail, allExpenses, addRepayment
             const [view, setView] = useState('dashboard');
             const [selectedFriendId, setSelectedFriendId] = useState(null);
+            const [editingExpenseId, setEditingExpenseId] = useState(null);
+            const [editingRepaymentId, setEditingRepaymentId] = useState(null);
             
+            // Data State
             const [friends, setFriends] = useState(() => {
-                try {
-                    const saved = localStorage.getItem('tokyo_friends');
-                    return saved ? JSON.parse(saved) : [];
-                } catch (e) { return []; }
+                try { return JSON.parse(localStorage.getItem('tokyo_friends')) || []; } catch { return []; }
             });
-
             const [expenses, setExpenses] = useState(() => {
-                try {
-                    const saved = localStorage.getItem('tokyo_expenses');
-                    return saved ? JSON.parse(saved) : [];
-                } catch (e) { return []; }
+                try { return JSON.parse(localStorage.getItem('tokyo_expenses')) || []; } catch { return []; }
+            });
+            const [repayments, setRepayments] = useState(() => {
+                try { return JSON.parse(localStorage.getItem('tokyo_repayments')) || []; } catch { return []; }
             });
 
+            // Forms State
             const [newFriendName, setNewFriendName] = useState('');
-
+            
+            // Expense Form (Add & Edit)
             const [expenseForm, setExpenseForm] = useState({
                 title: '',
                 amount: '',
                 category: 'food',
                 hasFee: false,
-                payerIds: []
+                payerIds: [],
+                date: new Date().toISOString().split('T')[0]
             });
 
-            useEffect(() => {
-                localStorage.setItem('tokyo_friends', JSON.stringify(friends));
-            }, [friends]);
+            // Repayment Form
+            const [repaymentForm, setRepaymentForm] = useState({
+                amount: '',
+                date: new Date().toISOString().split('T')[0],
+                note: ''
+            });
 
-            useEffect(() => {
-                localStorage.setItem('tokyo_expenses', JSON.stringify(expenses));
-            }, [expenses]);
+            // Persistence
+            useEffect(() => { localStorage.setItem('tokyo_friends', JSON.stringify(friends)); }, [friends]);
+            useEffect(() => { localStorage.setItem('tokyo_expenses', JSON.stringify(expenses)); }, [expenses]);
+            useEffect(() => { localStorage.setItem('tokyo_repayments', JSON.stringify(repayments)); }, [repayments]);
 
-            const formatMoney = (amount) => {
-                return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(amount);
-            };
-
+            // --- Helpers ---
+            const formatMoney = (amount) => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(amount);
+            
             const calculateFinalAmount = (amount, hasFee) => {
                 const num = parseFloat(amount);
                 if (isNaN(num)) return 0;
-                // 金額本身先四捨五入到整數
                 return hasFee ? Math.round(num * 1.015) : Math.round(num);
             };
 
-            // *** 核心修改：計算每人分攤金額時，使用 Math.ceil (無條件進位) ***
             const calculatePerPerson = (total, count) => {
                 if (count === 0) return 0;
-                return Math.ceil(total / count);
+                return Math.ceil(total / count); // 無條件進位
             };
 
+            // --- Handlers: Friends ---
             const handleAddFriend = () => {
                 if (!newFriendName.trim()) return;
-                const newFriend = {
-                    id: Date.now().toString(),
-                    name: newFriendName.trim()
-                };
-                setFriends([...friends, newFriend]);
+                setFriends([...friends, { id: Date.now().toString(), name: newFriendName.trim() }]);
                 setNewFriendName('');
             };
 
             const handleDeleteFriend = (id) => {
-                if (confirm('確定要刪除這位朋友嗎？')) {
+                if (confirm('確定刪除？這會影響相關帳目計算。')) {
                     setFriends(friends.filter(f => f.id !== id));
+                    // 這裡可以選擇是否一併刪除該朋友的還款紀錄
                 }
             };
 
-            const togglePayer = (id) => {
-                setExpenseForm(prev => {
-                    const current = prev.payerIds;
-                    if (current.includes(id)) {
-                        return { ...prev, payerIds: current.filter(p => p !== id) };
-                    } else {
-                        return { ...prev, payerIds: [...current, id] };
-                    }
-                });
-            };
-
-            const selectAllPayers = () => {
-                const allIds = ['me', ...friends.map(f => f.id)];
-                if (expenseForm.payerIds.length === allIds.length) {
-                    setExpenseForm(prev => ({ ...prev, payerIds: [] }));
-                } else {
-                    setExpenseForm(prev => ({ ...prev, payerIds: allIds }));
-                }
-            };
-
-            const handleSubmitExpense = () => {
+            // --- Handlers: Expenses ---
+            const handleSaveExpense = () => {
                 if (!expenseForm.title || !expenseForm.amount || expenseForm.payerIds.length === 0) {
                     alert('請填寫完整資訊');
                     return;
                 }
-
                 const finalTotal = calculateFinalAmount(expenseForm.amount, expenseForm.hasFee);
-                
-                const newExpense = {
-                    id: Date.now().toString(),
+                const expenseData = {
+                    id: editingExpenseId || Date.now().toString(),
                     title: expenseForm.title,
                     amount: parseFloat(expenseForm.amount),
                     hasFee: expenseForm.hasFee,
                     finalTotal: finalTotal,
                     category: expenseForm.category,
                     payerIds: expenseForm.payerIds,
-                    date: new Date().toISOString()
+                    date: expenseForm.date
                 };
 
-                setExpenses([newExpense, ...expenses]);
-                setExpenseForm({
-                    title: '',
-                    amount: '',
-                    category: 'food',
-                    hasFee: false,
-                    payerIds: []
-                });
-                setView('dashboard');
+                if (editingExpenseId) {
+                    setExpenses(expenses.map(e => e.id === editingExpenseId ? expenseData : e));
+                    setEditingExpenseId(null);
+                } else {
+                    setExpenses([expenseData, ...expenses]);
+                }
+                
+                // Reset form
+                setExpenseForm({ title: '', amount: '', category: 'food', hasFee: false, payerIds: [], date: new Date().toISOString().split('T')[0] });
+                // Return to appropriate view
+                if (editingExpenseId) {
+                    setView('allExpenses'); // or dashboard
+                } else {
+                    setView('dashboard');
+                }
             };
 
-            const deleteExpense = (id) => {
+            const handleEditExpense = (expense) => {
+                setEditingExpenseId(expense.id);
+                // 還原手續費前的原始金額 (近似值)
+                let rawAmount = expense.amount; 
+                setExpenseForm({
+                    title: expense.title,
+                    amount: rawAmount,
+                    category: expense.category,
+                    hasFee: expense.hasFee,
+                    payerIds: expense.payerIds,
+                    date: expense.date ? expense.date.split('T')[0] : new Date().toISOString().split('T')[0]
+                });
+                setView('addExpense');
+            };
+
+            const handleDeleteExpense = (id) => {
                 if(confirm('確定刪除這筆款項？')) {
                     setExpenses(expenses.filter(e => e.id !== id));
                 }
             };
 
-            // 計算欠款邏輯 (Updated)
-            const debts = useMemo(() => {
-                const result = {};
-                friends.forEach(f => result[f.id] = 0);
+            const togglePayer = (id) => {
+                setExpenseForm(prev => {
+                    const current = prev.payerIds;
+                    return current.includes(id) ? { ...prev, payerIds: current.filter(p => p !== id) } : { ...prev, payerIds: [...current, id] };
+                });
+            };
 
+            const selectAllPayers = () => {
+                const allIds = ['me', ...friends.map(f => f.id)];
+                setExpenseForm(prev => ({ ...prev, payerIds: prev.payerIds.length === allIds.length ? [] : allIds }));
+            };
+
+            // --- Handlers: Repayments ---
+            const handleSaveRepayment = () => {
+                if (!repaymentForm.amount) return;
+                
+                const repaymentData = {
+                    id: editingRepaymentId || Date.now().toString(),
+                    friendId: selectedFriendId,
+                    amount: parseInt(repaymentForm.amount),
+                    date: repaymentForm.date,
+                    note: repaymentForm.note
+                };
+
+                if (editingRepaymentId) {
+                    setRepayments(repayments.map(r => r.id === editingRepaymentId ? repaymentData : r));
+                    setEditingRepaymentId(null);
+                } else {
+                    setRepayments([repaymentData, ...repayments]);
+                }
+
+                setRepaymentForm({ amount: '', date: new Date().toISOString().split('T')[0], note: '' });
+                setView('friendDetail');
+            };
+
+            const handleDeleteRepayment = (id) => {
+                if(confirm('刪除這筆還款紀錄？')) setRepayments(repayments.filter(r => r.id !== id));
+            };
+
+            const handleEditRepayment = (rep) => {
+                setEditingRepaymentId(rep.id);
+                setRepaymentForm({ amount: rep.amount, date: rep.date, note: rep.note });
+                setView('addRepayment');
+            };
+
+            // --- Statistics ---
+            const debts = useMemo(() => {
+                const result = {}; // { friendId: { totalDebt: 0, totalRepaid: 0, remaining: 0 } }
+                friends.forEach(f => result[f.id] = { totalDebt: 0, totalRepaid: 0, remaining: 0 });
+
+                // Calculate Debts (Expenses)
                 expenses.forEach(exp => {
                     const splitCount = exp.payerIds.length;
                     if (splitCount === 0) return;
-                    
-                    // 使用無條件進位計算每人應付
                     const perPersonShare = calculatePerPerson(exp.finalTotal, splitCount);
-                    
                     exp.payerIds.forEach(pid => {
-                        if (pid !== 'me' && result[pid] !== undefined) {
-                            result[pid] += perPersonShare;
-                        }
+                        if (pid !== 'me' && result[pid]) result[pid].totalDebt += perPersonShare;
                     });
                 });
-                return result;
-            }, [expenses, friends]);
 
-            const totalOwedToMe = Object.values(debts).reduce((a, b) => a + b, 0);
-
-            const getFriendExpenses = (friendId) => {
-                return expenses.filter(e => e.payerIds.includes(friendId)).map(e => ({
-                    ...e,
-                    share: calculatePerPerson(e.finalTotal, e.payerIds.length)
-                }));
-            };
-
-            const copyReport = (friendId) => {
-                const friendName = friends.find(f => f.id === friendId)?.name;
-                const list = getFriendExpenses(friendId);
-                const total = debts[friendId];
-                
-                let text = `致 ${friendName} 的東京旅遊帳單：\n\n`;
-                list.forEach(item => {
-                    text += `${item.title} (${CATEGORIES.find(c=>c.id===item.category).name}): ${item.share}日圓\n`;
+                // Calculate Repayments
+                repayments.forEach(rep => {
+                    if (result[rep.friendId]) result[rep.friendId].totalRepaid += rep.amount;
                 });
-                text += `\n總計欠款: ${formatMoney(total)}`;
-                
-                const textArea = document.createElement("textarea");
-                textArea.value = text;
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand("copy");
-                document.body.removeChild(textArea);
-                alert('帳單已複製 (計算方式：每筆消費除以人數後無條件進位)');
-            };
 
-            // Views
+                // Calculate Remaining
+                Object.keys(result).forEach(fid => {
+                    result[fid].remaining = result[fid].totalDebt - result[fid].totalRepaid;
+                });
+
+                return result;
+            }, [expenses, repayments, friends]);
+
+            const totalOutstanding = Object.values(debts).reduce((acc, curr) => acc + curr.remaining, 0);
+
+
+            // --- Render Components ---
+
+            // View: Dashboard
             if (view === 'dashboard') {
                 return (
                     <div className="max-w-md mx-auto bg-gray-50 min-h-screen pb-20">
-                        <div className="bg-indigo-600 p-6 text-white rounded-b-3xl shadow-lg sticky top-0 z-10">
+                        <div className="bg-slate-800 p-6 text-white rounded-b-3xl shadow-lg sticky top-0 z-10">
                             <div className="flex justify-between items-start mb-4">
                                 <div>
-                                    <h1 className="text-2xl font-bold">公費分帳神器</h1>
-                                    <p className="text-indigo-200 text-xs mt-1 bg-indigo-800 inline-block px-2 py-1 rounded">主揪保護機制：採無條件進位</p>
+                                    <h1 className="text-2xl font-bold">東京分帳 V3</h1>
+                                    <p className="text-slate-400 text-xs mt-1">代墊總回收預估 (扣除已還款)</p>
                                 </div>
-                                <button onClick={() => setView('addFriend')} className="p-2 bg-indigo-500 rounded-lg hover:bg-indigo-400 transition">
+                                <button onClick={() => setView('addFriend')} className="p-2 bg-slate-700 rounded-lg hover:bg-slate-600 transition">
                                     <Icons.Users size={20} />
                                 </button>
                             </div>
-                            <div className="text-4xl font-bold tracking-tight">
-                                {formatMoney(totalOwedToMe)}
+                            <div className="text-4xl font-bold tracking-tight text-emerald-400">
+                                {formatMoney(totalOutstanding)}
                             </div>
-                            <p className="text-indigo-200 text-sm mt-2">待回收總額</p>
+                            <div className="mt-4 flex gap-2">
+                                <button 
+                                    onClick={() => setView('allExpenses')}
+                                    className="flex-1 bg-slate-700 hover:bg-slate-600 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition"
+                                >
+                                    <Icons.List size={16} /> 管理所有帳目
+                                </button>
+                            </div>
                         </div>
 
                         <div className="p-4 space-y-4">
@@ -261,33 +304,43 @@
                                         <p>點擊右上方按鈕新增朋友</p>
                                     </div>
                                 ) : (
-                                    friends.map(friend => (
-                                        <div 
-                                            key={friend.id}
-                                            onClick={() => { setSelectedFriendId(friend.id); setView('friendDetail'); }}
-                                            className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center active:bg-gray-50 cursor-pointer border border-transparent hover:border-indigo-100"
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-600">
-                                                    {friend.name[0]}
+                                    friends.map(friend => {
+                                        const data = debts[friend.id] || { totalDebt: 0, totalRepaid: 0, remaining: 0 };
+                                        return (
+                                            <div 
+                                                key={friend.id}
+                                                onClick={() => { setSelectedFriendId(friend.id); setView('friendDetail'); }}
+                                                className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center active:bg-gray-50 cursor-pointer border border-transparent hover:border-indigo-100"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600">
+                                                        {friend.name[0]}
+                                                    </div>
+                                                    <div>
+                                                        <span className="font-bold text-lg text-gray-800 block">{friend.name}</span>
+                                                        {data.totalRepaid > 0 && <span className="text-xs text-emerald-600">已還 {formatMoney(data.totalRepaid)}</span>}
+                                                    </div>
                                                 </div>
-                                                <span className="font-bold text-lg text-gray-800">{friend.name}</span>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="font-bold text-red-500 text-lg">
-                                                    {formatMoney(debts[friend.id] || 0)}
+                                                <div className="text-right">
+                                                    <div className={`font-bold text-lg ${data.remaining > 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                                                        {formatMoney(data.remaining)}
+                                                    </div>
+                                                    <div className="text-xs text-gray-400">剩餘欠款</div>
                                                 </div>
-                                                <div className="text-xs text-gray-400">點擊查看明細</div>
                                             </div>
-                                        </div>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </div>
                         </div>
 
                         <div className="fixed bottom-6 right-6 safe-bottom">
                             <button 
-                                onClick={() => setView('addExpense')}
+                                onClick={() => { 
+                                    setEditingExpenseId(null);
+                                    setExpenseForm({ title: '', amount: '', category: 'food', hasFee: false, payerIds: [], date: new Date().toISOString().split('T')[0] });
+                                    setView('addExpense'); 
+                                }}
                                 className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-xl flex items-center justify-center active:scale-95 transition-transform"
                             >
                                 <Icons.Plus size={28} />
@@ -297,22 +350,79 @@
                 );
             }
 
+            // View: All Expenses List (Editable)
+            if (view === 'allExpenses') {
+                const sortedExpenses = [...expenses].sort((a,b) => new Date(b.date) - new Date(a.date));
+                return (
+                    <div className="max-w-md mx-auto bg-gray-50 min-h-screen pb-10">
+                         <div className="bg-white sticky top-0 z-10 border-b shadow-sm">
+                            <div className="p-4 flex items-center gap-2">
+                                <button onClick={() => setView('dashboard')} className="p-2 -ml-2"><Icons.ArrowLeft /></button>
+                                <h2 className="font-bold text-xl flex-1">代墊明細管理</h2>
+                                <div className="text-sm text-gray-500">共 {expenses.length} 筆</div>
+                            </div>
+                        </div>
+                        <div className="p-4 space-y-3">
+                            {sortedExpenses.map(exp => {
+                                const cat = CATEGORIES.find(c => c.id === exp.category);
+                                return (
+                                    <div key={exp.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center">
+                                                    {cat.icon}
+                                                </div>
+                                                <div>
+                                                    <div className="font-bold text-gray-800">{exp.title}</div>
+                                                    <div className="text-xs text-gray-400">
+                                                        {exp.date.split('T')[0]} • {cat.name}
+                                                        {exp.hasFee && <span className="ml-1 text-red-400 font-bold">+1.5%</span>}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="font-bold text-lg text-slate-700">{formatMoney(exp.finalTotal)}</div>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-50">
+                                            <div className="text-xs text-gray-500">
+                                                分攤: {exp.payerIds.length} 人 (一人 {formatMoney(calculatePerPerson(exp.finalTotal, exp.payerIds.length))})
+                                            </div>
+                                            <div className="flex gap-3">
+                                                <button onClick={() => handleDeleteExpense(exp.id)} className="text-gray-400 hover:text-red-500"><Icons.Trash2 size={18} /></button>
+                                                <button onClick={() => handleEditExpense(exp)} className="text-indigo-600 hover:text-indigo-800"><Icons.Edit size={18} /></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                );
+            }
+
+            // View: Add/Edit Expense
             if (view === 'addExpense') {
                 const finalAmt = calculateFinalAmount(expenseForm.amount, expenseForm.hasFee);
                 const splitCount = expenseForm.payerIds.length;
-                // UI 顯示用的預估每人金額 (無條件進位)
                 const perPerson = calculatePerPerson(finalAmt, splitCount);
                 const allPayerIds = ['me', ...friends.map(f => f.id)];
 
                 return (
                     <div className="max-w-md mx-auto bg-white min-h-screen flex flex-col">
                         <div className="p-4 border-b flex items-center gap-2 sticky top-0 bg-white z-10">
-                            <button onClick={() => setView('dashboard')} className="p-2"><Icons.ArrowLeft /></button>
-                            <h2 className="font-bold text-xl">新增消費</h2>
+                            <button onClick={() => setView(editingExpenseId ? 'allExpenses' : 'dashboard')} className="p-2"><Icons.ArrowLeft /></button>
+                            <h2 className="font-bold text-xl">{editingExpenseId ? '編輯消費' : '新增消費'}</h2>
                         </div>
 
                         <div className="p-6 space-y-6 flex-1 overflow-y-auto pb-24">
                             <div>
+                                <label className="block text-sm font-medium text-gray-500 mb-1">日期</label>
+                                <input 
+                                    type="date" 
+                                    className="w-full p-2 bg-gray-50 rounded-lg mb-4 font-bold text-gray-700"
+                                    value={expenseForm.date}
+                                    onChange={(e) => setExpenseForm({...expenseForm, date: e.target.value})}
+                                />
+
                                 <label className="block text-sm font-medium text-gray-500 mb-1">總金額 (日幣)</label>
                                 <div className="relative">
                                     <input 
@@ -340,7 +450,7 @@
                                     <label htmlFor="fee" className="text-gray-600 text-sm">海外手續費 (總額 x 1.5%)</label>
                                 </div>
                                 <div className="mt-1 text-right text-gray-400 text-sm">
-                                    總計入帳: {formatMoney(finalAmt)}
+                                    入帳金額: {formatMoney(finalAmt)}
                                 </div>
                             </div>
 
@@ -350,7 +460,7 @@
                                     <input 
                                         type="text" 
                                         className="w-full p-3 bg-gray-50 rounded-xl focus:outline-indigo-500"
-                                        placeholder="例如：六本木觀景台門票"
+                                        placeholder="例如：敘敘苑燒肉"
                                         value={expenseForm.title}
                                         onChange={(e) => setExpenseForm({...expenseForm, title: e.target.value})}
                                     />
@@ -429,85 +539,179 @@
                                 <span>每人應付: <span className="text-indigo-600 font-bold">{formatMoney(perPerson)}</span></span>
                             </div>
                             <button 
-                                onClick={handleSubmitExpense}
+                                onClick={handleSaveExpense}
                                 className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition"
                             >
-                                確認記帳
+                                {editingExpenseId ? '儲存修改' : '確認記帳'}
                             </button>
                         </div>
                     </div>
                 );
             }
 
+            // View: Friend Detail (Tabs: Expense / Repayment)
             if (view === 'friendDetail' && selectedFriendId) {
                 const friend = friends.find(f => f.id === selectedFriendId);
-                const list = getFriendExpenses(selectedFriendId);
-                const total = debts[selectedFriendId];
-                list.sort((a,b) => new Date(b.date) - new Date(a.date));
+                const [tab, setTab] = useState('debt'); // 'debt' or 'repayment'
+
+                // Debt List
+                const myExpenses = expenses.filter(e => e.payerIds.includes(selectedFriendId)).map(e => ({
+                    ...e,
+                    share: calculatePerPerson(e.finalTotal, e.payerIds.length)
+                })).sort((a,b) => new Date(b.date) - new Date(a.date));
+
+                // Repayment List
+                const myRepayments = repayments.filter(r => r.friendId === selectedFriendId).sort((a,b) => new Date(b.date) - new Date(a.date));
+
+                const { totalDebt, totalRepaid, remaining } = debts[selectedFriendId];
+
+                // Copy Text Gen
+                const copyReport = () => {
+                    let text = `致 ${friend.name} 的東京帳單：\n\n`;
+                    text += `【消費明細】\n`;
+                    myExpenses.forEach(item => text += `${item.date.split('T')[0]} ${item.title}: ${item.share}日圓\n`);
+                    text += `\n消費總額: ${formatMoney(totalDebt)}\n`;
+                    if (totalRepaid > 0) {
+                        text += `已還款: -${formatMoney(totalRepaid)}\n`;
+                    }
+                    text += `----------------\n`;
+                    text += `剩餘欠款: ${formatMoney(remaining)}`;
+
+                    const ta = document.createElement("textarea");
+                    ta.value = text;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(ta);
+                    alert('帳單已複製到剪貼簿');
+                };
 
                 return (
-                    <div className="max-w-md mx-auto bg-gray-50 min-h-screen">
+                    <div className="max-w-md mx-auto bg-gray-50 min-h-screen pb-20">
                         <div className="bg-white sticky top-0 z-10 border-b">
                             <div className="p-4 flex items-center gap-2">
                                 <button onClick={() => setView('dashboard')} className="p-2 -ml-2"><Icons.ArrowLeft /></button>
-                                <h2 className="font-bold text-xl flex-1">{friend?.name} 的帳務</h2>
-                                <button onClick={() => copyReport(selectedFriendId)} className="p-2 text-indigo-600">
-                                    <Icons.Share size={20} />
-                                </button>
+                                <h2 className="font-bold text-xl flex-1">{friend?.name}</h2>
+                                <button onClick={copyReport} className="p-2 text-indigo-600"><Icons.Share size={20} /></button>
                             </div>
-                            <div className="px-6 pb-6 text-center border-b border-gray-100">
-                                <p className="text-gray-500 text-sm mb-1">目前總欠款</p>
-                                <div className="text-4xl font-bold text-red-500">{formatMoney(total)}</div>
+                            <div className="px-6 pb-6 text-center">
+                                <p className="text-gray-500 text-sm mb-1">剩餘欠款</p>
+                                <div className={`text-4xl font-bold ${remaining > 0 ? 'text-red-500' : 'text-emerald-500'}`}>{formatMoney(remaining)}</div>
+                                <div className="flex justify-center gap-4 text-xs mt-2 text-gray-400">
+                                    <span>總消費 {formatMoney(totalDebt)}</span>
+                                    <span>已還款 {formatMoney(totalRepaid)}</span>
+                                </div>
+                            </div>
+                            <div className="flex border-t">
+                                <button onClick={() => setTab('debt')} className={`flex-1 py-3 text-sm font-bold ${tab === 'debt' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-400'}`}>
+                                    消費明細
+                                </button>
+                                <button onClick={() => setTab('repayment')} className={`flex-1 py-3 text-sm font-bold ${tab === 'repayment' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-400'}`}>
+                                    還款紀錄
+                                </button>
                             </div>
                         </div>
 
                         <div className="p-4 space-y-3">
-                            <div className="flex justify-between items-center">
-                                <h3 className="text-sm font-bold text-gray-400 ml-1">消費明細 ({list.length}筆)</h3>
-                                <div className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">計算方式：無條件進位</div>
-                            </div>
-                            
-                            {list.length === 0 ? (
-                                <div className="text-center text-gray-400 py-10">目前沒有欠款紀錄</div>
-                            ) : (
-                                list.map(item => {
+                            {tab === 'debt' ? (
+                                myExpenses.length === 0 ? <div className="text-center text-gray-400 py-10">無消費紀錄</div> :
+                                myExpenses.map(item => {
                                     const cat = CATEGORIES.find(c => c.id === item.category);
                                     return (
-                                        <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm relative group">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                                        <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm">
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="text-indigo-100 bg-indigo-600 rounded-full w-8 h-8 flex items-center justify-center text-xs">
                                                         {cat.icon}
                                                     </div>
                                                     <div>
                                                         <div className="font-bold text-gray-800">{item.title}</div>
-                                                        <div className="text-xs text-gray-400">
-                                                            {new Date(item.date).toLocaleDateString()}
-                                                            {item.hasFee && <span className="ml-1 text-red-400 font-bold">+1.5%</span>}
-                                                        </div>
+                                                        <div className="text-xs text-gray-400">{item.date.split('T')[0]}</div>
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <div className="font-bold text-red-500">{formatMoney(item.share)}</div>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="text-xs bg-gray-50 p-2 rounded text-gray-500 flex justify-between">
-                                                <span>總額 {formatMoney(item.finalTotal)} ÷ {item.payerIds.length} 人</span>
-                                                <button onClick={() => deleteExpense(item.id)} className="text-red-400 underline">刪除</button>
+                                                <div className="font-bold text-red-500">{formatMoney(item.share)}</div>
                                             </div>
                                         </div>
-                                    );
+                                    )
                                 })
+                            ) : (
+                                <div>
+                                    <button 
+                                        onClick={() => { setEditingRepaymentId(null); setRepaymentForm({ amount: '', date: new Date().toISOString().split('T')[0], note: '' }); setView('addRepayment'); }}
+                                        className="w-full py-3 border-2 border-dashed border-emerald-300 text-emerald-600 rounded-xl font-bold mb-4 hover:bg-emerald-50"
+                                    >
+                                        + 新增還款紀錄
+                                    </button>
+                                    {myRepayments.length === 0 ? <div className="text-center text-gray-400 py-4">無還款紀錄</div> :
+                                    myRepayments.map(rep => (
+                                        <div key={rep.id} className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-emerald-400 flex justify-between items-center mb-3">
+                                            <div>
+                                                <div className="font-bold text-gray-800">還款 {formatMoney(rep.amount)}</div>
+                                                <div className="text-xs text-gray-400">{rep.date} {rep.note && `• ${rep.note}`}</div>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleEditRepayment(rep)} className="text-emerald-600"><Icons.Edit size={16} /></button>
+                                                <button onClick={() => handleDeleteRepayment(rep.id)} className="text-gray-300 hover:text-red-500"><Icons.Trash2 size={16} /></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
                         </div>
                     </div>
                 );
             }
 
-            if (view === 'addExpense') {
-                return null; // 重複判斷，刪除多餘邏輯
+            // View: Add/Edit Repayment
+            if (view === 'addRepayment') {
+                return (
+                    <div className="max-w-md mx-auto bg-white min-h-screen p-4">
+                        <div className="flex items-center gap-2 mb-6">
+                            <button onClick={() => setView('friendDetail')} className="p-2 -ml-2"><Icons.ArrowLeft /></button>
+                            <h2 className="font-bold text-xl">{editingRepaymentId ? '編輯還款' : '新增還款'}</h2>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-500 mb-1">還款日期</label>
+                                <input 
+                                    type="date" 
+                                    value={repaymentForm.date}
+                                    onChange={(e) => setRepaymentForm({...repaymentForm, date: e.target.value})}
+                                    className="w-full p-3 bg-gray-50 rounded-xl"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-500 mb-1">還款金額 (日幣)</label>
+                                <input 
+                                    type="number" 
+                                    value={repaymentForm.amount}
+                                    onChange={(e) => setRepaymentForm({...repaymentForm, amount: e.target.value})}
+                                    className="w-full p-3 bg-gray-50 rounded-xl text-2xl font-bold"
+                                    placeholder="0"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-500 mb-1">備註 (選填)</label>
+                                <input 
+                                    type="text" 
+                                    value={repaymentForm.note}
+                                    onChange={(e) => setRepaymentForm({...repaymentForm, note: e.target.value})}
+                                    className="w-full p-3 bg-gray-50 rounded-xl"
+                                    placeholder="例如：先還一半"
+                                />
+                            </div>
+                            <button 
+                                onClick={handleSaveRepayment}
+                                className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl mt-4"
+                            >
+                                確認儲存
+                            </button>
+                        </div>
+                    </div>
+                );
             }
+
+            // View: Add Friend (Keep simple)
             if (view === 'addFriend') {
                 return (
                     <div className="max-w-md mx-auto bg-white min-h-screen p-4">
@@ -515,36 +719,23 @@
                             <button onClick={() => setView('dashboard')} className="p-2 -ml-2"><Icons.ArrowLeft /></button>
                             <h2 className="font-bold text-xl">成員管理</h2>
                         </div>
-                        <div className="mb-8">
-                            <label className="block text-sm font-medium text-gray-500 mb-2">新增朋友名字</label>
-                            <div className="flex gap-2">
-                                <input 
-                                    type="text" 
-                                    value={newFriendName}
-                                    onChange={(e) => setNewFriendName(e.target.value)}
-                                    className="flex-1 p-3 bg-gray-50 rounded-xl focus:outline-indigo-500"
-                                    placeholder="輸入名字"
-                                />
-                                <button 
-                                    onClick={handleAddFriend}
-                                    className="bg-indigo-600 text-white px-6 rounded-xl font-bold"
-                                >
-                                    新增
-                                </button>
-                            </div>
+                        <div className="flex gap-2 mb-6">
+                            <input 
+                                type="text" 
+                                value={newFriendName}
+                                onChange={(e) => setNewFriendName(e.target.value)}
+                                className="flex-1 p-3 bg-gray-50 rounded-xl"
+                                placeholder="輸入名字"
+                            />
+                            <button onClick={handleAddFriend} className="bg-slate-700 text-white px-6 rounded-xl font-bold">新增</button>
                         </div>
-                        <div>
-                            <h3 className="text-sm font-bold text-gray-400 mb-3">目前成員 ({friends.length}人)</h3>
-                            <div className="space-y-2">
-                                {friends.map(f => (
-                                    <div key={f.id} className="flex justify-between items-center p-3 border rounded-xl">
-                                        <span className="font-bold">{f.name}</span>
-                                        <button onClick={() => handleDeleteFriend(f.id)} className="text-gray-400 hover:text-red-500 p-2">
-                                            <Icons.Trash2 size={18} />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
+                        <div className="space-y-2">
+                            {friends.map(f => (
+                                <div key={f.id} className="flex justify-between items-center p-3 border rounded-xl">
+                                    <span className="font-bold">{f.name}</span>
+                                    <button onClick={() => handleDeleteFriend(f.id)} className="text-gray-400 hover:text-red-500"><Icons.Trash2 size={18} /></button>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 );
@@ -558,3 +749,4 @@
     </script>
 </body>
 </html>
+
