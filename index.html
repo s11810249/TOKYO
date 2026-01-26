@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>東京分帳神器 V3 (還款管理版)</title>
+    <title>東京分帳神器 V4 (總報表版)</title>
     
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -21,6 +21,9 @@
         /* 隱藏滾動條但保持功能 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @media print {
+            .no-print { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -52,6 +55,8 @@
             Check: (props) => <IconWrapper {...props}><polyline points="20 6 9 17 4 12"></polyline></IconWrapper>,
             List: (props) => <IconWrapper {...props}><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></IconWrapper>,
             Wallet: (props) => <IconWrapper {...props}><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"></path></IconWrapper>,
+            FileText: (props) => <IconWrapper {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></IconWrapper>,
+            Copy: (props) => <IconWrapper {...props}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></IconWrapper>,
         };
 
         const CATEGORIES = [
@@ -66,10 +71,9 @@
         ];
 
         const App = () => {
-            // Views: dashboard, addFriend, addExpense, editExpense, friendDetail, allExpenses, addRepayment
+            // Views: dashboard, addFriend, addExpense, editExpense, friendDetail, allExpenses, addRepayment, summaryReport
             const [view, setView] = useState('dashboard');
-            // *** FIX: Moved tab state here to top level ***
-            const [tab, setTab] = useState('debt'); // 'debt' or 'repayment'
+            const [tab, setTab] = useState('debt'); 
             
             const [selectedFriendId, setSelectedFriendId] = useState(null);
             const [editingExpenseId, setEditingExpenseId] = useState(null);
@@ -125,7 +129,7 @@
                 return Math.ceil(total / count); // 無條件進位
             };
 
-            // --- Handlers: Friends ---
+            // --- Handlers ---
             const handleAddFriend = () => {
                 if (!newFriendName.trim()) return;
                 setFriends([...friends, { id: Date.now().toString(), name: newFriendName.trim() }]);
@@ -135,11 +139,9 @@
             const handleDeleteFriend = (id) => {
                 if (confirm('確定刪除？這會影響相關帳目計算。')) {
                     setFriends(friends.filter(f => f.id !== id));
-                    // 這裡可以選擇是否一併刪除該朋友的還款紀錄
                 }
             };
 
-            // --- Handlers: Expenses ---
             const handleSaveExpense = () => {
                 if (!expenseForm.title || !expenseForm.amount || expenseForm.payerIds.length === 0) {
                     alert('請填寫完整資訊');
@@ -164,11 +166,9 @@
                     setExpenses([expenseData, ...expenses]);
                 }
                 
-                // Reset form
                 setExpenseForm({ title: '', amount: '', category: 'food', hasFee: false, payerIds: [], date: new Date().toISOString().split('T')[0] });
-                // Return to appropriate view
                 if (editingExpenseId) {
-                    setView('allExpenses'); // or dashboard
+                    setView('allExpenses');
                 } else {
                     setView('dashboard');
                 }
@@ -176,11 +176,9 @@
 
             const handleEditExpense = (expense) => {
                 setEditingExpenseId(expense.id);
-                // 還原手續費前的原始金額 (近似值)
-                let rawAmount = expense.amount; 
                 setExpenseForm({
                     title: expense.title,
-                    amount: rawAmount,
+                    amount: expense.amount, // 使用者原本輸入的金額
                     category: expense.category,
                     hasFee: expense.hasFee,
                     payerIds: expense.payerIds,
@@ -207,10 +205,8 @@
                 setExpenseForm(prev => ({ ...prev, payerIds: prev.payerIds.length === allIds.length ? [] : allIds }));
             };
 
-            // --- Handlers: Repayments ---
             const handleSaveRepayment = () => {
                 if (!repaymentForm.amount) return;
-                
                 const repaymentData = {
                     id: editingRepaymentId || Date.now().toString(),
                     friendId: selectedFriendId,
@@ -242,10 +238,9 @@
 
             // --- Statistics ---
             const debts = useMemo(() => {
-                const result = {}; // { friendId: { totalDebt: 0, totalRepaid: 0, remaining: 0 } }
+                const result = {}; 
                 friends.forEach(f => result[f.id] = { totalDebt: 0, totalRepaid: 0, remaining: 0 });
 
-                // Calculate Debts (Expenses)
                 expenses.forEach(exp => {
                     const splitCount = exp.payerIds.length;
                     if (splitCount === 0) return;
@@ -255,12 +250,10 @@
                     });
                 });
 
-                // Calculate Repayments
                 repayments.forEach(rep => {
                     if (result[rep.friendId]) result[rep.friendId].totalRepaid += rep.amount;
                 });
 
-                // Calculate Remaining
                 Object.keys(result).forEach(fid => {
                     result[fid].remaining = result[fid].totalDebt - result[fid].totalRepaid;
                 });
@@ -270,8 +263,7 @@
 
             const totalOutstanding = Object.values(debts).reduce((acc, curr) => acc + curr.remaining, 0);
 
-
-            // --- Render Components ---
+            // --- Views ---
 
             // View: Dashboard
             if (view === 'dashboard') {
@@ -280,7 +272,7 @@
                         <div className="bg-slate-800 p-6 text-white rounded-b-3xl shadow-lg sticky top-0 z-10">
                             <div className="flex justify-between items-start mb-4">
                                 <div>
-                                    <h1 className="text-2xl font-bold">東京分帳 V3</h1>
+                                    <h1 className="text-2xl font-bold">東京分帳 V4</h1>
                                     <p className="text-slate-400 text-xs mt-1">代墊總回收預估 (扣除已還款)</p>
                                 </div>
                                 <button onClick={() => setView('addFriend')} className="p-2 bg-slate-700 rounded-lg hover:bg-slate-600 transition">
@@ -295,7 +287,13 @@
                                     onClick={() => setView('allExpenses')}
                                     className="flex-1 bg-slate-700 hover:bg-slate-600 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition"
                                 >
-                                    <Icons.List size={16} /> 管理所有帳目
+                                    <Icons.List size={16} /> 代墊管理
+                                </button>
+                                <button 
+                                    onClick={() => setView('summaryReport')}
+                                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition"
+                                >
+                                    <Icons.FileText size={16} /> 結算總報表
                                 </button>
                             </div>
                         </div>
@@ -312,7 +310,6 @@
                                         return (
                                             <div 
                                                 key={friend.id}
-                                                // *** FIX: Reset tab to 'debt' when clicking friend ***
                                                 onClick={() => { setSelectedFriendId(friend.id); setTab('debt'); setView('friendDetail'); }}
                                                 className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center active:bg-gray-50 cursor-pointer border border-transparent hover:border-indigo-100"
                                             >
@@ -354,7 +351,116 @@
                 );
             }
 
-            // View: All Expenses List (Editable)
+            // View: Summary Report (New Feature)
+            if (view === 'summaryReport') {
+                const copyAllReport = () => {
+                    let text = `【東京旅行 財務總結算】\n\n`;
+                    friends.forEach(friend => {
+                        const data = debts[friend.id];
+                        text += `■ ${friend.name}\n`;
+                        text += `總消費: ${formatMoney(data.totalDebt)}\n`;
+                        text += `已還款: ${formatMoney(data.totalRepaid)}\n`;
+                        text += `剩餘欠款: ${formatMoney(data.remaining)}\n\n`;
+                    });
+                    const ta = document.createElement("textarea");
+                    ta.value = text;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(ta);
+                    alert('全團摘要已複製！');
+                };
+
+                return (
+                    <div className="max-w-md mx-auto bg-gray-50 min-h-screen pb-10">
+                        <div className="bg-white sticky top-0 z-10 border-b shadow-sm">
+                            <div className="p-4 flex items-center gap-2">
+                                <button onClick={() => setView('dashboard')} className="p-2 -ml-2"><Icons.ArrowLeft /></button>
+                                <h2 className="font-bold text-xl flex-1">結算總報表</h2>
+                                <button onClick={copyAllReport} className="p-2 text-indigo-600 flex gap-1 items-center text-sm font-bold bg-indigo-50 rounded-lg px-3">
+                                    <Icons.Copy size={16} /> 複製總表
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="p-4 space-y-6">
+                            {friends.map(friend => {
+                                const friendExpenses = expenses
+                                    .filter(e => e.payerIds.includes(friend.id))
+                                    .sort((a,b) => new Date(a.date) - new Date(b.date)); // 按日期排序
+                                
+                                const data = debts[friend.id];
+
+                                return (
+                                    <div key={friend.id} className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+                                        <div className="bg-slate-50 p-3 border-b border-gray-100 flex justify-between items-center">
+                                            <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                                <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs text-slate-600">
+                                                    {friend.name[0]}
+                                                </div>
+                                                {friend.name}
+                                            </h3>
+                                            <div className="text-sm font-bold text-indigo-600">
+                                                欠款 {formatMoney(data.remaining)}
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Table Header */}
+                                        <div className="grid grid-cols-12 bg-gray-50 p-2 text-xs text-gray-500 font-medium border-b">
+                                            <div className="col-span-3">日期</div>
+                                            <div className="col-span-5">項目/手續費</div>
+                                            <div className="col-span-4 text-right">分攤金額(小計)</div>
+                                        </div>
+
+                                        {/* Table Body */}
+                                        <div className="divide-y divide-gray-50">
+                                            {friendExpenses.length === 0 ? (
+                                                <div className="p-4 text-center text-gray-400 text-sm">無消費紀錄</div>
+                                            ) : (
+                                                friendExpenses.map(exp => {
+                                                    const share = calculatePerPerson(exp.finalTotal, exp.payerIds.length);
+                                                    return (
+                                                        <div key={exp.id} className="grid grid-cols-12 p-2 text-sm hover:bg-gray-50 items-center">
+                                                            <div className="col-span-3 text-gray-500 text-xs">
+                                                                {exp.date.split('T')[0].slice(5)}
+                                                            </div>
+                                                            <div className="col-span-5">
+                                                                <div className="font-medium text-gray-800 truncate">{exp.title}</div>
+                                                                {exp.hasFee && (
+                                                                    <div className="text-[10px] text-red-500 font-bold bg-red-50 inline-block px-1 rounded">
+                                                                        +1.5%手續費
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="col-span-4 text-right font-medium text-slate-700">
+                                                                {formatMoney(share)}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+
+                                        {/* Footer Summary */}
+                                        <div className="bg-slate-50 p-3 border-t border-gray-100 text-xs text-gray-500 flex justify-between items-center">
+                                            <div>
+                                                <div>總消費: {formatMoney(data.totalDebt)}</div>
+                                                <div>已還款: {formatMoney(data.totalRepaid)}</div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-gray-400">合計應付</div>
+                                                <div className="text-lg font-bold text-slate-800">{formatMoney(data.remaining)}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            }
+
+            // View: All Expenses List
             if (view === 'allExpenses') {
                 const sortedExpenses = [...expenses].sort((a,b) => new Date(b.date) - new Date(a.date));
                 return (
@@ -556,20 +662,14 @@
             // View: Friend Detail (Tabs: Expense / Repayment)
             if (view === 'friendDetail' && selectedFriendId) {
                 const friend = friends.find(f => f.id === selectedFriendId);
-                // *** Removed nested useState here ***
-
-                // Debt List
                 const myExpenses = expenses.filter(e => e.payerIds.includes(selectedFriendId)).map(e => ({
                     ...e,
                     share: calculatePerPerson(e.finalTotal, e.payerIds.length)
                 })).sort((a,b) => new Date(b.date) - new Date(a.date));
 
-                // Repayment List
                 const myRepayments = repayments.filter(r => r.friendId === selectedFriendId).sort((a,b) => new Date(b.date) - new Date(a.date));
-
                 const { totalDebt, totalRepaid, remaining } = debts[selectedFriendId];
 
-                // Copy Text Gen
                 const copyReport = () => {
                     let text = `致 ${friend.name} 的東京帳單：\n\n`;
                     text += `【消費明細】\n`;
