@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>東京分帳神器 V6 (透明帳務版)</title>
+    <title>旅遊分帳</title>
     
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -15,13 +15,49 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
+    <!-- Custom Theme Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f4f7fb',
+                            100: '#e9eef5',
+                            200: '#cedce9',
+                            300: '#a2bed7',
+                            400: '#709bc0',
+                            500: '#4a78a0',
+                            600: '#3c658d',
+                            700: '#315273',
+                            800: '#2c4660',
+                            900: '#293c51',
+                            950: '#1b2736',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', "SF Pro TC", "Segoe UI", 'Roboto', "Helvetica Neue", 'Arial', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; }
+        body { 
+            background-color: #f4f7fb; /* primary-50 */
+            color: #2c4660; /* primary-800 */
+        }
         .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        @media print {
-            .no-print { display: none; }
+        
+        /* 輸入框聚焦特效 - 改為 primary-400 */
+        .input-focus { transition: all 0.2s; }
+        .input-focus:focus-within {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border-color: #709bc0; 
         }
     </style>
 </head>
@@ -31,7 +67,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // --- 內建圖示組件 (SVG) ---
+        // --- SVG Icons ---
         const IconWrapper = ({ size = 24, children, className, onClick }) => (
             <svg onClick={onClick} xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
         );
@@ -56,6 +92,7 @@
             Wallet: (props) => <IconWrapper {...props}><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"></path></IconWrapper>,
             FileText: (props) => <IconWrapper {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></IconWrapper>,
             Copy: (props) => <IconWrapper {...props}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></IconWrapper>,
+            JapaneseYen: (props) => <IconWrapper {...props}><path d="M6 5h12"/><path d="M6 9h12"/><path d="M12 3v18"/></IconWrapper>,
         };
 
         const CATEGORIES = [
@@ -77,6 +114,7 @@
             const [editingExpenseId, setEditingExpenseId] = useState(null);
             const [editingRepaymentId, setEditingRepaymentId] = useState(null);
             
+            // Data State
             const [friends, setFriends] = useState(() => {
                 try { return JSON.parse(localStorage.getItem('tokyo_friends')) || []; } catch { return []; }
             });
@@ -86,12 +124,19 @@
             const [repayments, setRepayments] = useState(() => {
                 try { return JSON.parse(localStorage.getItem('tokyo_repayments')) || []; } catch { return []; }
             });
+            const [lastRate, setLastRate] = useState(() => {
+                try { return localStorage.getItem('tokyo_last_rate') || '0.22'; } catch { return '0.22'; }
+            });
 
+            // Forms State
             const [newFriendName, setNewFriendName] = useState('');
             
+            // Expense Form
             const [expenseForm, setExpenseForm] = useState({
                 title: '',
                 amount: '',
+                currency: 'TWD', // TWD or JPY
+                rate: '',
                 category: 'food',
                 hasFee: false,
                 payerIds: [],
@@ -104,32 +149,38 @@
                 note: ''
             });
 
+            // Persistence
             useEffect(() => { localStorage.setItem('tokyo_friends', JSON.stringify(friends)); }, [friends]);
             useEffect(() => { localStorage.setItem('tokyo_expenses', JSON.stringify(expenses)); }, [expenses]);
             useEffect(() => { localStorage.setItem('tokyo_repayments', JSON.stringify(repayments)); }, [repayments]);
+            useEffect(() => { localStorage.setItem('tokyo_last_rate', lastRate); }, [lastRate]);
 
             // --- Helpers ---
             const formatMoney = (amount) => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(amount);
-            
-            // 計算總金額 (含手續費)
-            const calculateFinalAmount = (amount, hasFee) => {
+            const formatJPY = (amount) => new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }).format(amount);
+
+            const calculateBaseTWD = (amount, currency, rate) => {
                 const num = parseFloat(amount);
                 if (isNaN(num)) return 0;
-                return hasFee ? Math.round(num * 1.015) : Math.round(num);
+                if (currency === 'JPY') {
+                    const r = parseFloat(rate);
+                    return isNaN(r) ? 0 : Math.round(num * r);
+                }
+                return Math.round(num);
             };
 
-            // 計算一個人應付的總額 (無條件進位)
+            const calculateFinalTotal = (baseTWD, hasFee) => {
+                return hasFee ? Math.round(baseTWD * 1.015) : baseTWD;
+            };
+
             const calculatePerPerson = (total, count) => {
                 if (count === 0) return 0;
                 return Math.ceil(total / count); 
             };
 
-            // 計算一個人分攤到的手續費
-            // 邏輯：總手續費 = 總金額(含費) - 總原始金額
-            // 為了不讓主揪虧錢，手續費分攤也採無條件進位
-            const calculatePerPersonFee = (finalTotal, originalTotal, count) => {
+            const calculatePerPersonFee = (finalTotal, baseTWD, count) => {
                 if (count === 0) return 0;
-                const totalFee = finalTotal - originalTotal;
+                const totalFee = finalTotal - baseTWD;
                 return Math.ceil(totalFee / count);
             };
 
@@ -151,13 +202,27 @@
                     alert('請填寫完整資訊');
                     return;
                 }
-                const finalTotal = calculateFinalAmount(expenseForm.amount, expenseForm.hasFee);
+                if (expenseForm.currency === 'JPY' && !expenseForm.rate) {
+                    alert('請輸入匯率');
+                    return;
+                }
+
+                if (expenseForm.currency === 'JPY') {
+                    setLastRate(expenseForm.rate);
+                }
+
+                const baseTWD = calculateBaseTWD(expenseForm.amount, expenseForm.currency, expenseForm.rate);
+                const finalTotal = calculateFinalTotal(baseTWD, expenseForm.hasFee);
+                
                 const expenseData = {
                     id: editingExpenseId || Date.now().toString(),
                     title: expenseForm.title,
-                    amount: parseFloat(expenseForm.amount), // 原始金額
+                    originalAmount: parseFloat(expenseForm.amount),
+                    currency: expenseForm.currency,
+                    rate: expenseForm.currency === 'JPY' ? parseFloat(expenseForm.rate) : 1,
+                    baseTWD: baseTWD,
                     hasFee: expenseForm.hasFee,
-                    finalTotal: finalTotal, // 含手續費金額
+                    finalTotal: finalTotal, 
                     category: expenseForm.category,
                     payerIds: expenseForm.payerIds,
                     date: expenseForm.date
@@ -170,7 +235,12 @@
                     setExpenses([expenseData, ...expenses]);
                 }
                 
-                setExpenseForm({ title: '', amount: '', category: 'food', hasFee: false, payerIds: [], date: new Date().toISOString().split('T')[0] });
+                setExpenseForm({ 
+                    title: '', amount: '', currency: 'TWD', rate: lastRate, 
+                    category: 'food', hasFee: false, payerIds: [], 
+                    date: new Date().toISOString().split('T')[0] 
+                });
+
                 if (editingExpenseId) {
                     setView('allExpenses');
                 } else {
@@ -182,7 +252,9 @@
                 setEditingExpenseId(expense.id);
                 setExpenseForm({
                     title: expense.title,
-                    amount: expense.amount, 
+                    amount: expense.originalAmount || expense.amount, 
+                    currency: expense.currency || 'TWD',
+                    rate: expense.rate || lastRate,
                     category: expense.category,
                     hasFee: expense.hasFee,
                     payerIds: expense.payerIds,
@@ -218,22 +290,17 @@
                     date: repaymentForm.date,
                     note: repaymentForm.note
                 };
-
                 if (editingRepaymentId) {
                     setRepayments(repayments.map(r => r.id === editingRepaymentId ? repaymentData : r));
                     setEditingRepaymentId(null);
                 } else {
                     setRepayments([repaymentData, ...repayments]);
                 }
-
                 setRepaymentForm({ amount: '', date: new Date().toISOString().split('T')[0], note: '' });
                 setView('friendDetail');
             };
 
-            const handleDeleteRepayment = (id) => {
-                if(confirm('刪除這筆紀錄？')) setRepayments(repayments.filter(r => r.id !== id));
-            };
-
+            const handleDeleteRepayment = (id) => { if(confirm('刪除這筆紀錄？')) setRepayments(repayments.filter(r => r.id !== id)); };
             const handleEditRepayment = (rep) => {
                 setEditingRepaymentId(rep.id);
                 setRepaymentForm({ amount: rep.amount, date: rep.date, note: rep.note });
@@ -243,24 +310,17 @@
             const debts = useMemo(() => {
                 const result = {}; 
                 friends.forEach(f => result[f.id] = { totalDebt: 0, totalRepaid: 0, remaining: 0 });
-
                 expenses.forEach(exp => {
                     const splitCount = exp.payerIds.length;
                     if (splitCount === 0) return;
-                    const perPersonShare = calculatePerPerson(exp.finalTotal, splitCount);
+                    const finalTotal = exp.finalTotal !== undefined ? exp.finalTotal : exp.amount;
+                    const perPersonShare = calculatePerPerson(finalTotal, splitCount);
                     exp.payerIds.forEach(pid => {
                         if (pid !== 'me' && result[pid]) result[pid].totalDebt += perPersonShare;
                     });
                 });
-
-                repayments.forEach(rep => {
-                    if (result[rep.friendId]) result[rep.friendId].totalRepaid += rep.amount;
-                });
-
-                Object.keys(result).forEach(fid => {
-                    result[fid].remaining = result[fid].totalDebt - result[fid].totalRepaid;
-                });
-
+                repayments.forEach(rep => { if (result[rep.friendId]) result[rep.friendId].totalRepaid += rep.amount; });
+                Object.keys(result).forEach(fid => { result[fid].remaining = result[fid].totalDebt - result[fid].totalRepaid; });
                 return result;
             }, [expenses, repayments, friends]);
 
@@ -270,41 +330,46 @@
 
             if (view === 'dashboard') {
                 return (
-                    <div className="max-w-3xl mx-auto bg-gray-50 min-h-screen pb-20">
-                        <div className="bg-slate-800 p-6 text-white shadow-lg sticky top-0 z-10 md:rounded-b-3xl">
-                            <div className="flex justify-between items-start mb-4">
-                                <div>
-                                    <h1 className="text-2xl font-bold">東京分帳 V6</h1>
-                                    <p className="text-slate-400 text-xs mt-1">代墊總回收預估</p>
+                    <div className="max-w-3xl mx-auto min-h-screen pb-20">
+                        {/* Header Area */}
+                        <div className="bg-white border-b border-primary-200 sticky top-0 z-20 shadow-sm">
+                            <div className="p-6">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h1 className="text-2xl font-bold text-primary-900 tracking-tight">旅遊分帳</h1>
+                                    <button onClick={() => setView('addFriend')} className="p-2.5 bg-primary-50 text-primary-600 rounded-full hover:bg-primary-100 transition-colors">
+                                        <Icons.Users size={22} />
+                                    </button>
                                 </div>
-                                <button onClick={() => setView('addFriend')} className="p-2 bg-slate-700 rounded-lg hover:bg-slate-600 transition">
-                                    <Icons.Users size={20} />
-                                </button>
-                            </div>
-                            <div className="text-4xl font-bold tracking-tight text-emerald-400">
-                                {formatMoney(totalOutstanding)}
-                            </div>
-                            <div className="mt-4 flex gap-2">
-                                <button 
-                                    onClick={() => setView('allExpenses')}
-                                    className="flex-1 bg-slate-700 hover:bg-slate-600 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition"
-                                >
-                                    <Icons.List size={16} /> 代墊管理
-                                </button>
-                                <button 
-                                    onClick={() => setView('summaryReport')}
-                                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition"
-                                >
-                                    <Icons.FileText size={16} /> 結算總報表
-                                </button>
+                                
+                                <div className="bg-primary-50 rounded-2xl p-6 border border-primary-100 mb-6">
+                                    <p className="text-primary-500 text-sm font-bold tracking-wide uppercase mb-1">代墊總回收預估</p>
+                                    <div className="text-4xl font-extrabold text-primary-700 tracking-tight">
+                                        {formatMoney(totalOutstanding)}
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <button 
+                                        onClick={() => setView('allExpenses')}
+                                        className="flex-1 bg-white border border-primary-200 hover:bg-primary-50 text-primary-700 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition shadow-sm"
+                                    >
+                                        <Icons.List size={18} className="text-primary-400" /> 代墊管理
+                                    </button>
+                                    <button 
+                                        onClick={() => setView('summaryReport')}
+                                        className="flex-1 bg-primary-600 hover:bg-primary-700 text-white py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition shadow-md"
+                                    >
+                                        <Icons.FileText size={18} className="text-primary-200" /> 結算總報表
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
                         <div className="p-4 space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {friends.length === 0 ? (
-                                    <div className="text-center py-10 text-gray-400 col-span-full">
-                                        <p>點擊右上方按鈕新增朋友</p>
+                                    <div className="text-center py-10 text-primary-400 col-span-full">
+                                        <p>尚未新增朋友，請點擊右上角圖示</p>
                                     </div>
                                 ) : (
                                     friends.map(friend => {
@@ -313,22 +378,22 @@
                                             <div 
                                                 key={friend.id}
                                                 onClick={() => { setSelectedFriendId(friend.id); setTab('debt'); setView('friendDetail'); }}
-                                                className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center active:bg-gray-50 cursor-pointer border border-transparent hover:border-indigo-100 transition-colors"
+                                                className="bg-white p-5 rounded-2xl shadow-sm border border-primary-100 flex justify-between items-center cursor-pointer hover:border-primary-300 hover:shadow-md transition-all group"
                                             >
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center font-bold text-lg text-primary-600 group-hover:bg-primary-200 transition-colors">
                                                         {friend.name[0]}
                                                     </div>
                                                     <div>
-                                                        <span className="font-bold text-lg text-gray-800 block">{friend.name}</span>
-                                                        {data.totalRepaid > 0 && <span className="text-xs text-emerald-600">已付 {formatMoney(data.totalRepaid)}</span>}
+                                                        <span className="font-bold text-lg text-primary-900 block mb-0.5">{friend.name}</span>
+                                                        {data.totalRepaid > 0 && <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">已付 {formatMoney(data.totalRepaid)}</span>}
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
-                                                    <div className={`font-bold text-lg ${data.remaining > 0 ? 'text-slate-800' : 'text-gray-400'}`}>
+                                                    <div className={`font-bold text-xl ${data.remaining > 0 ? 'text-primary-800' : 'text-primary-300'}`}>
                                                         {formatMoney(data.remaining)}
                                                     </div>
-                                                    <div className="text-xs text-gray-400">待結算</div>
+                                                    <div className="text-xs font-bold text-primary-400 mt-1">待結算</div>
                                                 </div>
                                             </div>
                                         );
@@ -337,328 +402,220 @@
                             </div>
                         </div>
 
-                        <div className="fixed bottom-6 right-6 safe-bottom">
+                        <div className="fixed bottom-6 right-6 safe-bottom z-30">
                             <button 
                                 onClick={() => { 
                                     setEditingExpenseId(null);
-                                    setExpenseForm({ title: '', amount: '', category: 'food', hasFee: false, payerIds: [], date: new Date().toISOString().split('T')[0] });
+                                    setExpenseForm({ 
+                                        title: '', amount: '', currency: 'TWD', rate: lastRate, 
+                                        category: 'food', hasFee: false, payerIds: [], 
+                                        date: new Date().toISOString().split('T')[0] 
+                                    });
                                     setView('addExpense'); 
                                 }}
-                                className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-xl flex items-center justify-center active:scale-95 transition-transform hover:bg-indigo-700"
+                                className="w-16 h-16 bg-primary-600 text-white rounded-full shadow-xl shadow-primary-300 flex items-center justify-center active:scale-95 transition-transform hover:bg-primary-500"
                             >
-                                <Icons.Plus size={28} />
+                                <Icons.Plus size={32} />
                             </button>
                         </div>
                     </div>
                 );
             }
 
-            if (view === 'summaryReport') {
-                const copyAllReport = () => {
-                    let text = `【東京旅行 結算單】\n\n`;
-                    friends.forEach(friend => {
-                        const data = debts[friend.id];
-                        text += `■ ${friend.name}\n`;
-                        text += `總應付: ${formatMoney(data.totalDebt)}\n`;
-                        text += `已支付: ${formatMoney(data.totalRepaid)}\n`;
-                        text += `待結算: ${formatMoney(data.remaining)}\n\n`;
-                    });
-                    const ta = document.createElement("textarea");
-                    ta.value = text;
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand("copy");
-                    document.body.removeChild(ta);
-                    alert('全團結算單已複製！');
-                };
-
-                return (
-                    <div className="max-w-4xl mx-auto bg-gray-50 min-h-screen pb-10">
-                        <div className="bg-white sticky top-0 z-10 border-b shadow-sm">
-                            <div className="p-4 flex items-center gap-2 max-w-4xl mx-auto">
-                                <button onClick={() => setView('dashboard')} className="p-2 -ml-2"><Icons.ArrowLeft /></button>
-                                <h2 className="font-bold text-xl flex-1">結算總報表</h2>
-                                <button onClick={copyAllReport} className="p-2 text-indigo-600 flex gap-1 items-center text-sm font-bold bg-indigo-50 rounded-lg px-3 hover:bg-indigo-100">
-                                    <Icons.Copy size={16} /> 複製總表
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="p-4 space-y-6">
-                            {friends.map(friend => {
-                                const friendExpenses = expenses
-                                    .filter(e => e.payerIds.includes(friend.id))
-                                    .sort((a,b) => new Date(a.date) - new Date(b.date));
-                                
-                                const data = debts[friend.id];
-
-                                return (
-                                    <div key={friend.id} className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-                                        <div className="bg-slate-50 p-3 border-b border-gray-100 flex justify-between items-center">
-                                            <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                                                <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs text-slate-600">
-                                                    {friend.name[0]}
-                                                </div>
-                                                {friend.name}
-                                            </h3>
-                                            <div className="text-sm font-bold text-indigo-600">
-                                                待結算 {formatMoney(data.remaining)}
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="grid grid-cols-12 bg-gray-50 p-2 text-xs text-gray-500 font-medium border-b">
-                                            <div className="col-span-3">日期</div>
-                                            <div className="col-span-6">項目/手續費明細</div>
-                                            <div className="col-span-3 text-right">應付金額</div>
-                                        </div>
-
-                                        <div className="divide-y divide-gray-50">
-                                            {friendExpenses.length === 0 ? (
-                                                <div className="p-4 text-center text-gray-400 text-sm">無消費紀錄</div>
-                                            ) : (
-                                                friendExpenses.map(exp => {
-                                                    const count = exp.payerIds.length;
-                                                    const share = calculatePerPerson(exp.finalTotal, count);
-                                                    
-                                                    // 計算個人的手續費分攤
-                                                    let feeDisplay = null;
-                                                    if (exp.hasFee) {
-                                                        const feePerPerson = calculatePerPersonFee(exp.finalTotal, exp.amount, count);
-                                                        const basePerPerson = share - feePerPerson;
-                                                        feeDisplay = `(消費 ${formatMoney(basePerPerson)} + 海外交易手續費 ${formatMoney(feePerPerson)})`;
-                                                    }
-
-                                                    return (
-                                                        <div key={exp.id} className="grid grid-cols-12 p-2 text-sm hover:bg-gray-50 items-center">
-                                                            <div className="col-span-3 text-gray-500 text-xs">
-                                                                {exp.date.split('T')[0].slice(5)}
-                                                            </div>
-                                                            <div className="col-span-6">
-                                                                <div className="font-medium text-gray-800 truncate">{exp.title}</div>
-                                                                {exp.hasFee && (
-                                                                    <div className="text-xs text-slate-400 mt-0.5">
-                                                                        {feeDisplay}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                            <div className="col-span-3 text-right font-medium text-slate-700">
-                                                                {formatMoney(share)}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-
-                                        <div className="bg-slate-50 p-3 border-t border-gray-100 text-xs text-gray-500 flex justify-between items-center">
-                                            <div>
-                                                <div>總應付: {formatMoney(data.totalDebt)}</div>
-                                                <div>已支付: {formatMoney(data.totalRepaid)}</div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-gray-400">目前待結算</div>
-                                                <div className="text-lg font-bold text-slate-800">{formatMoney(data.remaining)}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                );
-            }
-
-            if (view === 'allExpenses') {
-                const sortedExpenses = [...expenses].sort((a,b) => new Date(b.date) - new Date(a.date));
-                return (
-                    <div className="max-w-3xl mx-auto bg-gray-50 min-h-screen pb-10">
-                         <div className="bg-white sticky top-0 z-10 border-b shadow-sm">
-                            <div className="p-4 flex items-center gap-2 max-w-3xl mx-auto">
-                                <button onClick={() => setView('dashboard')} className="p-2 -ml-2"><Icons.ArrowLeft /></button>
-                                <h2 className="font-bold text-xl flex-1">代墊明細管理</h2>
-                                <div className="text-sm text-gray-500">共 {expenses.length} 筆</div>
-                            </div>
-                        </div>
-                        <div className="p-4 space-y-3">
-                            {sortedExpenses.map(exp => {
-                                const cat = CATEGORIES.find(c => c.id === exp.category);
-                                const totalFee = exp.finalTotal - exp.amount;
-                                
-                                return (
-                                    <div key={exp.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center">
-                                                    {cat.icon}
-                                                </div>
-                                                <div>
-                                                    <div className="font-bold text-gray-800">{exp.title}</div>
-                                                    <div className="text-xs text-gray-400">
-                                                        {exp.date.split('T')[0]} • {cat.name}
-                                                        {exp.hasFee && <span className="ml-1 text-slate-500"> (含海外交易手續費總額 {formatMoney(totalFee)})</span>}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div className="font-bold text-lg text-slate-700">{formatMoney(exp.finalTotal)}</div>
-                                        </div>
-                                        <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-50">
-                                            <div className="text-xs text-gray-500">
-                                                分攤: {exp.payerIds.length} 人 (一人 {formatMoney(calculatePerPerson(exp.finalTotal, exp.payerIds.length))})
-                                            </div>
-                                            <div className="flex gap-3">
-                                                <button onClick={() => handleDeleteExpense(exp.id)} className="text-gray-400 hover:text-red-500"><Icons.Trash2 size={18} /></button>
-                                                <button onClick={() => handleEditExpense(exp)} className="text-indigo-600 hover:text-indigo-800"><Icons.Edit size={18} /></button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    </div>
-                );
-            }
-
             if (view === 'addExpense') {
-                const finalAmt = calculateFinalAmount(expenseForm.amount, expenseForm.hasFee);
-                const totalFee = finalAmt - (expenseForm.amount || 0);
+                const baseTWD = calculateBaseTWD(expenseForm.amount, expenseForm.currency, expenseForm.rate);
+                const finalAmt = calculateFinalTotal(baseTWD, expenseForm.hasFee);
+                const totalFee = finalAmt - baseTWD;
                 const splitCount = expenseForm.payerIds.length;
                 const perPerson = calculatePerPerson(finalAmt, splitCount);
                 const allPayerIds = ['me', ...friends.map(f => f.id)];
 
                 return (
                     <div className="max-w-2xl mx-auto bg-white min-h-screen flex flex-col">
-                        <div className="p-4 border-b flex items-center gap-2 sticky top-0 bg-white z-10">
-                            <button onClick={() => setView(editingExpenseId ? 'allExpenses' : 'dashboard')} className="p-2"><Icons.ArrowLeft /></button>
-                            <h2 className="font-bold text-xl">{editingExpenseId ? '編輯消費' : '新增消費'}</h2>
+                        <div className="px-4 py-3 border-b border-primary-100 flex items-center gap-3 sticky top-0 bg-white/90 backdrop-blur z-20">
+                            <button onClick={() => setView(editingExpenseId ? 'allExpenses' : 'dashboard')} className="p-2 -ml-2 text-primary-500 hover:bg-primary-50 rounded-full"><Icons.ArrowLeft /></button>
+                            <h2 className="font-bold text-lg text-primary-800">{editingExpenseId ? '編輯消費' : '新增消費'}</h2>
                         </div>
 
-                        <div className="p-6 space-y-6 flex-1 overflow-y-auto pb-24">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-500 mb-1">日期</label>
-                                <input 
-                                    type="date" 
-                                    className="w-full p-2 bg-gray-50 rounded-lg mb-4 font-bold text-gray-700"
-                                    value={expenseForm.date}
-                                    onChange={(e) => setExpenseForm({...expenseForm, date: e.target.value})}
-                                />
-
-                                <label className="block text-sm font-medium text-gray-500 mb-1">總金額 (日幣)</label>
-                                <div className="relative">
-                                    <input 
-                                        type="number" 
-                                        inputMode="numeric"
-                                        className="w-full text-4xl font-bold p-2 border-b-2 border-gray-200 focus:border-indigo-500 focus:outline-none bg-transparent"
-                                        placeholder="0"
-                                        value={expenseForm.amount}
-                                        onChange={(e) => setExpenseForm({...expenseForm, amount: e.target.value})}
-                                    />
-                                </div>
-                                <div className="mt-2 flex items-center gap-2">
-                                    <input 
-                                        type="checkbox" 
-                                        id="fee" 
-                                        checked={expenseForm.hasFee}
-                                        onChange={(e) => setExpenseForm({...expenseForm, hasFee: e.target.checked})}
-                                        className="w-5 h-5 accent-indigo-600"
-                                    />
-                                    <label htmlFor="fee" className="text-gray-600 text-sm">海外交易手續費 (1.5%)</label>
-                                </div>
-                                <div className="mt-2 text-right text-sm text-gray-500 bg-gray-50 p-2 rounded-lg">
-                                    {expenseForm.hasFee ? (
-                                        <span>原價 {formatMoney(expenseForm.amount || 0)} + 海外交易手續費 {formatMoney(totalFee)} = <span className="text-indigo-600 font-bold">總計 {formatMoney(finalAmt)}</span></span>
-                                    ) : (
-                                        <span>總計: <span className="text-indigo-600 font-bold">{formatMoney(finalAmt)}</span></span>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-500 mb-1">項目名稱</label>
-                                    <input 
-                                        type="text" 
-                                        className="w-full p-3 bg-gray-50 rounded-xl focus:outline-indigo-500"
-                                        placeholder="例如：敘敘苑燒肉"
-                                        value={expenseForm.title}
-                                        onChange={(e) => setExpenseForm({...expenseForm, title: e.target.value})}
-                                    />
+                        <div className="flex-1 overflow-y-auto no-scrollbar">
+                            <div className="p-6 space-y-8 pb-40"> 
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-primary-400 uppercase tracking-wider">消費日期</label>
+                                        <input 
+                                            type="date" 
+                                            className="w-full p-3 bg-primary-50 rounded-xl font-bold text-primary-700 outline-none focus:ring-2 focus:ring-primary-400 transition-all"
+                                            value={expenseForm.date}
+                                            onChange={(e) => setExpenseForm({...expenseForm, date: e.target.value})}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-primary-400 uppercase tracking-wider">幣別</label>
+                                        <div className="flex bg-primary-100 p-1 rounded-xl">
+                                            <button 
+                                                onClick={() => setExpenseForm({...expenseForm, currency: 'TWD'})}
+                                                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${expenseForm.currency === 'TWD' ? 'bg-white text-primary-600 shadow-sm' : 'text-primary-400'}`}
+                                            >TWD</button>
+                                            <button 
+                                                onClick={() => setExpenseForm({...expenseForm, currency: 'JPY'})}
+                                                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${expenseForm.currency === 'JPY' ? 'bg-white text-primary-600 shadow-sm' : 'text-primary-400'}`}
+                                            >JPY</button>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-500 mb-2">消費類別</label>
-                                    <div className="grid grid-cols-4 gap-2">
-                                        {CATEGORIES.map(cat => (
-                                            <button
-                                                key={cat.id}
-                                                onClick={() => setExpenseForm({...expenseForm, category: cat.id})}
-                                                className={`flex flex-col items-center justify-center p-2 rounded-xl text-xs transition-all ${
-                                                    expenseForm.category === cat.id 
-                                                    ? 'bg-indigo-600 text-white shadow-md' 
-                                                    : 'bg-gray-50 text-gray-500'
+                                    <label className="text-xs font-bold text-primary-400 uppercase tracking-wider block mb-2">
+                                        消費金額 ({expenseForm.currency})
+                                    </label>
+                                    <div className="relative input-focus bg-primary-50 rounded-2xl border border-transparent">
+                                        <input 
+                                            type="number" 
+                                            inputMode="decimal"
+                                            className="w-full text-4xl font-extrabold p-4 bg-transparent outline-none text-primary-800 placeholder-primary-300"
+                                            placeholder="0"
+                                            value={expenseForm.amount}
+                                            onChange={(e) => setExpenseForm({...expenseForm, amount: e.target.value})}
+                                        />
+                                        {expenseForm.currency === 'JPY' && (
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-primary-100">
+                                                <span className="text-xs font-bold text-primary-400">匯率</span>
+                                                <input 
+                                                    type="number" 
+                                                    inputMode="decimal"
+                                                    step="0.001"
+                                                    className="w-16 text-right font-bold text-primary-700 outline-none"
+                                                    placeholder="0.22"
+                                                    value={expenseForm.rate}
+                                                    onChange={(e) => setExpenseForm({...expenseForm, rate: e.target.value})}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="mt-3 p-4 bg-primary-50 rounded-xl border border-primary-100 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    type="checkbox" 
+                                                    id="fee" 
+                                                    checked={expenseForm.hasFee}
+                                                    onChange={(e) => setExpenseForm({...expenseForm, hasFee: e.target.checked})}
+                                                    className="w-5 h-5 accent-primary-600 rounded"
+                                                />
+                                                <label htmlFor="fee" className="text-sm font-bold text-primary-600 select-none">海外交易手續費 (+1.5%)</label>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="pt-3 border-t border-primary-200 text-sm text-primary-500 space-y-1 font-medium">
+                                            {expenseForm.currency === 'JPY' && (
+                                                <div className="flex justify-between">
+                                                    <span>日幣換算</span>
+                                                    <span>{formatJPY(expenseForm.amount || 0)} x {expenseForm.rate || '-'} ≈ {formatMoney(baseTWD)}</span>
+                                                </div>
+                                            )}
+                                            {expenseForm.hasFee && (
+                                                <div className="flex justify-between text-primary-500">
+                                                    <span>+ 手續費</span>
+                                                    <span>{formatMoney(totalFee)}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between font-bold text-primary-800 pt-1">
+                                                <span>總入帳金額 (TWD)</span>
+                                                <span className="text-lg text-primary-600">{formatMoney(finalAmt)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-primary-400 uppercase tracking-wider block mb-2">項目名稱</label>
+                                        <input 
+                                            type="text" 
+                                            className="w-full p-4 bg-primary-50 rounded-xl font-medium text-primary-700 outline-none focus:ring-2 focus:ring-primary-400 transition-all"
+                                            placeholder="例如：敘敘苑燒肉"
+                                            value={expenseForm.title}
+                                            onChange={(e) => setExpenseForm({...expenseForm, title: e.target.value})}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-primary-400 uppercase tracking-wider block mb-2">消費類別</label>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {CATEGORIES.map(cat => (
+                                                <button
+                                                    key={cat.id}
+                                                    onClick={() => setExpenseForm({...expenseForm, category: cat.id})}
+                                                    className={`flex flex-col items-center justify-center p-3 rounded-xl text-xs font-bold transition-all ${
+                                                        expenseForm.category === cat.id 
+                                                        ? 'bg-primary-600 text-white shadow-md transform scale-105' 
+                                                        : 'bg-white border border-primary-100 text-primary-400 hover:bg-primary-50'
+                                                    }`}
+                                                >
+                                                    <div className="mb-1">{cat.icon}</div>
+                                                    {cat.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div className="flex justify-between items-end mb-3">
+                                        <label className="text-xs font-bold text-primary-400 uppercase tracking-wider">選擇分攤對象</label>
+                                        <button onClick={selectAllPayers} className="text-xs text-primary-600 font-bold px-3 py-1 bg-primary-100 rounded-full hover:bg-primary-200 transition">
+                                            {expenseForm.payerIds.length === allPayerIds.length ? '取消全選' : '全選'}
+                                        </button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button 
+                                            onClick={() => togglePayer('me')}
+                                            className={`p-3 rounded-xl flex items-center gap-3 border transition-all ${
+                                                expenseForm.payerIds.includes('me') 
+                                                ? 'border-primary-500 bg-primary-50 text-primary-700 font-bold' 
+                                                : 'border-primary-100 bg-white text-primary-400'
+                                            }`}
+                                        >
+                                            <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
+                                                expenseForm.payerIds.includes('me') ? 'bg-primary-500 text-white' : 'bg-primary-200 text-transparent'
+                                            }`}>
+                                                <Icons.Check size={12} />
+                                            </div>
+                                            我自己 (主揪)
+                                        </button>
+
+                                        {friends.map(friend => (
+                                            <button 
+                                                key={friend.id}
+                                                onClick={() => togglePayer(friend.id)}
+                                                className={`p-3 rounded-xl flex items-center gap-3 border transition-all ${
+                                                    expenseForm.payerIds.includes(friend.id) 
+                                                    ? 'border-primary-500 bg-primary-50 text-primary-700 font-bold' 
+                                                    : 'border-primary-100 bg-white text-primary-400'
                                                 }`}
                                             >
-                                                <div className="mb-1">{cat.icon}</div>
-                                                {cat.name}
+                                                <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
+                                                    expenseForm.payerIds.includes(friend.id) ? 'bg-primary-500 text-white' : 'bg-primary-200 text-transparent'
+                                                }`}>
+                                                    <Icons.Check size={12} />
+                                                </div>
+                                                {friend.name}
                                             </button>
                                         ))}
                                     </div>
                                 </div>
                             </div>
-
-                            <div>
-                                <div className="flex justify-between items-end mb-2">
-                                    <label className="text-sm font-medium text-gray-500">誰有份？ (分母)</label>
-                                    <button onClick={selectAllPayers} className="text-xs text-indigo-600 font-bold px-2 py-1 bg-indigo-50 rounded hover:bg-indigo-100">
-                                        {expenseForm.payerIds.length === allPayerIds.length ? '取消全選' : '全選'}
-                                    </button>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button 
-                                        onClick={() => togglePayer('me')}
-                                        className={`p-3 rounded-xl flex items-center gap-2 border transition-all ${
-                                            expenseForm.payerIds.includes('me') 
-                                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700 font-bold' 
-                                            : 'border-gray-200 text-gray-400'
-                                        }`}
-                                    >
-                                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                                            expenseForm.payerIds.includes('me') ? 'border-indigo-500 bg-indigo-500' : 'border-gray-300'
-                                        }`}>
-                                            {expenseForm.payerIds.includes('me') && <Icons.Check size={10} className="text-white"/>}
-                                        </div>
-                                        我自己 (主揪)
-                                    </button>
-
-                                    {friends.map(friend => (
-                                        <button 
-                                            key={friend.id}
-                                            onClick={() => togglePayer(friend.id)}
-                                            className={`p-3 rounded-xl flex items-center gap-2 border transition-all ${
-                                                expenseForm.payerIds.includes(friend.id) 
-                                                ? 'border-indigo-500 bg-indigo-50 text-indigo-700 font-bold' 
-                                                : 'border-gray-200 text-gray-400'
-                                            }`}
-                                        >
-                                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                                                expenseForm.payerIds.includes(friend.id) ? 'border-indigo-500 bg-indigo-500' : 'border-gray-300'
-                                            }`}>
-                                                {expenseForm.payerIds.includes(friend.id) && <Icons.Check size={10} className="text-white"/>}
-                                            </div>
-                                            {friend.name}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
                         </div>
 
-                        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t safe-bottom max-w-2xl mx-auto">
-                            <div className="flex justify-between items-center mb-2 text-sm text-gray-500">
-                                <span>分攤人數: {splitCount} 人</span>
-                                <span>每人應付: <span className="text-indigo-600 font-bold">{formatMoney(perPerson)}</span></span>
+                        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-primary-100 p-4 safe-bottom max-w-2xl mx-auto shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-30">
+                            <div className="flex justify-between items-center mb-3 text-sm">
+                                <span className="text-primary-500 font-medium">分攤人數: <span className="font-bold text-primary-800">{splitCount}</span> 人</span>
+                                <span className="text-primary-500 font-medium">每人應付: <span className="text-primary-600 font-bold text-lg">{formatMoney(perPerson)}</span></span>
                             </div>
                             <button 
                                 onClick={handleSaveExpense}
-                                className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition hover:bg-indigo-700"
+                                className="w-full bg-primary-600 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition-transform hover:bg-primary-700"
                             >
                                 {editingExpenseId ? '儲存修改' : '確認記帳'}
                             </button>
@@ -671,17 +628,14 @@
                 const friend = friends.find(f => f.id === selectedFriendId);
                 const myExpenses = expenses.filter(e => e.payerIds.includes(selectedFriendId)).map(e => {
                     const count = e.payerIds.length;
-                    const share = calculatePerPerson(e.finalTotal, count);
+                    const finalTotal = e.finalTotal !== undefined ? e.finalTotal : e.amount;
+                    const baseTWD = e.baseTWD !== undefined ? e.baseTWD : e.amount;
+                    const share = calculatePerPerson(finalTotal, count);
                     let feePerPerson = 0;
                     if(e.hasFee) {
-                        feePerPerson = calculatePerPersonFee(e.finalTotal, e.amount, count);
+                        feePerPerson = calculatePerPersonFee(finalTotal, baseTWD, count);
                     }
-                    return {
-                        ...e,
-                        share,
-                        feePerPerson,
-                        basePerPerson: share - feePerPerson
-                    };
+                    return { ...e, share, feePerPerson, basePerPerson: share - feePerPerson };
                 }).sort((a,b) => new Date(b.date) - new Date(a.date));
 
                 const myRepayments = repayments.filter(r => r.friendId === selectedFriendId).sort((a,b) => new Date(b.date) - new Date(a.date));
@@ -692,74 +646,55 @@
                     text += `【應付明細】\n`;
                     myExpenses.forEach(item => {
                         text += `${item.date.split('T')[0]} ${item.title}: ${item.share}日圓`;
-                        if (item.hasFee) {
-                            text += `\n   (含消費 ${item.basePerPerson} + 海外交易手續費 ${item.feePerPerson})`;
-                        }
+                        if (item.hasFee) text += `\n   (含消費 ${item.basePerPerson} + 海外交易手續費 ${item.feePerPerson})`;
                         text += `\n`;
                     });
                     text += `\n應付總額: ${formatMoney(totalDebt)}\n`;
-                    if (totalRepaid > 0) {
-                        text += `已支付: -${formatMoney(totalRepaid)}\n`;
-                    }
+                    if (totalRepaid > 0) text += `已支付: -${formatMoney(totalRepaid)}\n`;
                     text += `----------------\n`;
                     text += `目前待結算: ${formatMoney(remaining)}`;
-
-                    const ta = document.createElement("textarea");
-                    ta.value = text;
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand("copy");
-                    document.body.removeChild(ta);
-                    alert('結算單已複製！');
+                    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); alert('已複製！');
                 };
 
                 return (
-                    <div className="max-w-2xl mx-auto bg-gray-50 min-h-screen pb-20">
-                        <div className="bg-white sticky top-0 z-10 border-b">
-                            <div className="p-4 flex items-center gap-2">
-                                <button onClick={() => setView('dashboard')} className="p-2 -ml-2"><Icons.ArrowLeft /></button>
-                                <h2 className="font-bold text-xl flex-1">{friend?.name}</h2>
-                                <button onClick={copyReport} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Icons.Share size={20} /></button>
+                    <div className="max-w-2xl mx-auto min-h-screen pb-20">
+                        <div className="bg-white border-b border-primary-100 sticky top-0 z-20">
+                            <div className="p-4 flex items-center gap-3">
+                                <button onClick={() => setView('dashboard')} className="p-2 -ml-2 hover:bg-primary-50 rounded-full text-primary-500"><Icons.ArrowLeft /></button>
+                                <h2 className="font-bold text-xl flex-1 text-primary-800">{friend?.name}</h2>
+                                <button onClick={copyReport} className="p-2 text-primary-600 bg-primary-50 rounded-lg font-bold text-xs flex items-center gap-1 hover:bg-primary-100"><Icons.Copy size={16} /> 複製</button>
                             </div>
                             <div className="px-6 pb-6 text-center">
-                                <p className="text-gray-500 text-sm mb-1">待結算金額</p>
-                                <div className={`text-4xl font-bold ${remaining > 0 ? 'text-slate-800' : 'text-emerald-500'}`}>{formatMoney(remaining)}</div>
-                                <div className="flex justify-center gap-4 text-xs mt-2 text-gray-400">
-                                    <span>總應付 {formatMoney(totalDebt)}</span>
-                                    <span>已支付 {formatMoney(totalRepaid)}</span>
-                                </div>
+                                <p className="text-primary-400 text-xs font-bold uppercase tracking-widest mb-2">待結算金額</p>
+                                <div className={`text-4xl font-extrabold ${remaining > 0 ? 'text-primary-800' : 'text-emerald-500'}`}>{formatMoney(remaining)}</div>
                             </div>
-                            <div className="flex border-t">
-                                <button onClick={() => setTab('debt')} className={`flex-1 py-3 text-sm font-bold ${tab === 'debt' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-400'}`}>
-                                    應付明細
-                                </button>
-                                <button onClick={() => setTab('repayment')} className={`flex-1 py-3 text-sm font-bold ${tab === 'repayment' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-400'}`}>
-                                    支付紀錄
-                                </button>
+                            <div className="flex border-t border-primary-100">
+                                <button onClick={() => setTab('debt')} className={`flex-1 py-4 text-sm font-bold border-b-2 transition-colors ${tab === 'debt' ? 'text-primary-600 border-primary-600' : 'text-primary-400 border-transparent'}`}>應付明細</button>
+                                <button onClick={() => setTab('repayment')} className={`flex-1 py-4 text-sm font-bold border-b-2 transition-colors ${tab === 'repayment' ? 'text-emerald-600 border-emerald-600' : 'text-primary-400 border-transparent'}`}>支付紀錄</button>
                             </div>
                         </div>
 
                         <div className="p-4 space-y-3">
                             {tab === 'debt' ? (
-                                myExpenses.length === 0 ? <div className="text-center text-gray-400 py-10">無消費紀錄</div> :
+                                myExpenses.length === 0 ? <div className="text-center text-primary-400 py-10">無消費紀錄</div> :
                                 myExpenses.map(item => {
                                     const cat = CATEGORIES.find(c => c.id === item.category);
                                     return (
-                                        <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm">
+                                        <div key={item.id} className="bg-white p-4 rounded-xl border border-primary-100 shadow-sm">
                                             <div className="flex justify-between items-start">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="text-indigo-100 bg-indigo-600 rounded-full w-8 h-8 flex items-center justify-center text-xs">
+                                                    <div className="text-primary-600 bg-primary-50 rounded-full w-10 h-10 flex items-center justify-center">
                                                         {cat.icon}
                                                     </div>
                                                     <div>
-                                                        <div className="font-bold text-gray-800">{item.title}</div>
-                                                        <div className="text-xs text-gray-400">
+                                                        <div className="font-bold text-primary-800">{item.title}</div>
+                                                        <div className="text-xs text-primary-400 font-medium">
                                                             {item.date.split('T')[0]} 
-                                                            {item.hasFee && <div className="text-slate-400 mt-0.5">(消費 {formatMoney(item.basePerPerson)} + 海外交易手續費 {formatMoney(item.feePerPerson)})</div>}
+                                                            {item.hasFee && <span className="ml-1 text-primary-500">(含手續費 {formatMoney(item.feePerPerson)})</span>}
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div className="font-bold text-slate-700">{formatMoney(item.share)}</div>
+                                                <div className="font-bold text-primary-700">{formatMoney(item.share)}</div>
                                             </div>
                                         </div>
                                     )
@@ -768,20 +703,19 @@
                                 <div>
                                     <button 
                                         onClick={() => { setEditingRepaymentId(null); setRepaymentForm({ amount: '', date: new Date().toISOString().split('T')[0], note: '' }); setView('addRepayment'); }}
-                                        className="w-full py-3 border-2 border-dashed border-emerald-300 text-emerald-600 rounded-xl font-bold mb-4 hover:bg-emerald-50"
+                                        className="w-full py-4 border-2 border-dashed border-emerald-200 text-emerald-600 rounded-xl font-bold mb-4 hover:bg-emerald-50 transition-colors"
                                     >
                                         + 新增支付紀錄
                                     </button>
-                                    {myRepayments.length === 0 ? <div className="text-center text-gray-400 py-4">無支付紀錄</div> :
-                                    myRepayments.map(rep => (
+                                    {myRepayments.map(rep => (
                                         <div key={rep.id} className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-emerald-400 flex justify-between items-center mb-3">
                                             <div>
-                                                <div className="font-bold text-gray-800">已付 {formatMoney(rep.amount)}</div>
-                                                <div className="text-xs text-gray-400">{rep.date} {rep.note && `• ${rep.note}`}</div>
+                                                <div className="font-bold text-primary-800">已付 {formatMoney(rep.amount)}</div>
+                                                <div className="text-xs text-primary-400">{rep.date} {rep.note && `• ${rep.note}`}</div>
                                             </div>
                                             <div className="flex gap-2">
-                                                <button onClick={() => handleEditRepayment(rep)} className="text-emerald-600"><Icons.Edit size={16} /></button>
-                                                <button onClick={() => handleDeleteRepayment(rep.id)} className="text-gray-300 hover:text-red-500"><Icons.Trash2 size={16} /></button>
+                                                <button onClick={() => handleEditRepayment(rep)} className="text-emerald-600 p-1 hover:bg-emerald-50 rounded"><Icons.Edit size={16} /></button>
+                                                <button onClick={() => handleDeleteRepayment(rep.id)} className="text-primary-300 p-1 hover:text-rose-500 hover:bg-rose-50 rounded"><Icons.Trash2 size={16} /></button>
                                             </div>
                                         </div>
                                     ))}
@@ -792,49 +726,130 @@
                 );
             }
 
+            if (view === 'summaryReport') {
+                const copyAllReport = () => {
+                    let text = `【東京旅行 結算單】\n\n`;
+                    friends.forEach(friend => {
+                        const data = debts[friend.id];
+                        text += `■ ${friend.name}\n總應付: ${formatMoney(data.totalDebt)}\n已支付: ${formatMoney(data.totalRepaid)}\n待結算: ${formatMoney(data.remaining)}\n\n`;
+                    });
+                    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); alert('全團結算單已複製！');
+                };
+                return (
+                    <div className="max-w-4xl mx-auto min-h-screen pb-10">
+                        <div className="bg-white sticky top-0 z-10 border-b border-primary-100 shadow-sm">
+                            <div className="p-4 flex items-center gap-3 max-w-4xl mx-auto">
+                                <button onClick={() => setView('dashboard')} className="p-2 -ml-2 hover:bg-primary-50 rounded-full text-primary-500"><Icons.ArrowLeft /></button>
+                                <h2 className="font-bold text-xl flex-1 text-primary-800">結算總報表</h2>
+                                <button onClick={copyAllReport} className="py-2 px-4 text-white bg-primary-600 rounded-lg text-sm font-bold hover:bg-primary-700 transition shadow-sm">複製總表</button>
+                            </div>
+                        </div>
+                        <div className="p-4 space-y-6">
+                            {friends.map(friend => {
+                                const friendExpenses = expenses.filter(e => e.payerIds.includes(friend.id)).sort((a,b) => new Date(a.date) - new Date(b.date));
+                                const data = debts[friend.id];
+                                return (
+                                    <div key={friend.id} className="bg-white rounded-2xl shadow-sm overflow-hidden border border-primary-100">
+                                        <div className="bg-primary-50 p-4 border-b border-primary-100 flex justify-between items-center">
+                                            <h3 className="font-bold text-lg text-primary-800 flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-primary-200 flex items-center justify-center text-xs text-primary-600">{friend.name[0]}</div>
+                                                {friend.name}
+                                            </h3>
+                                            <div className="text-sm font-bold text-primary-600 bg-white px-3 py-1 rounded-full border border-primary-100">待結算 {formatMoney(data.remaining)}</div>
+                                        </div>
+                                        <div className="grid grid-cols-12 bg-white p-3 text-xs text-primary-400 font-bold uppercase tracking-wider border-b border-primary-50">
+                                            <div className="col-span-3">日期</div>
+                                            <div className="col-span-6">項目 / 手續費</div>
+                                            <div className="col-span-3 text-right">小計</div>
+                                        </div>
+                                        <div className="divide-y divide-primary-50">
+                                            {friendExpenses.map(exp => {
+                                                const finalTotal = exp.finalTotal !== undefined ? exp.finalTotal : exp.amount;
+                                                const baseTWD = exp.baseTWD !== undefined ? exp.baseTWD : exp.amount;
+                                                const count = exp.payerIds.length;
+                                                const share = calculatePerPerson(finalTotal, count);
+                                                let feeDisplay = null;
+                                                if (exp.hasFee) {
+                                                    const feePerPerson = calculatePerPersonFee(finalTotal, baseTWD, count);
+                                                    const basePerPerson = share - feePerPerson;
+                                                    feeDisplay = `(消費 ${formatMoney(basePerPerson)} + 手續費 ${formatMoney(feePerPerson)})`;
+                                                }
+                                                return (
+                                                    <div key={exp.id} className="grid grid-cols-12 p-3 text-sm hover:bg-primary-50 items-center transition-colors">
+                                                        <div className="col-span-3 text-primary-500 font-medium text-xs">{exp.date.split('T')[0].slice(5)}</div>
+                                                        <div className="col-span-6 pr-2">
+                                                            <div className="font-bold text-primary-700 truncate">{exp.title}</div>
+                                                            {exp.hasFee && <div className="text-xs text-primary-400 mt-0.5">{feeDisplay}</div>}
+                                                        </div>
+                                                        <div className="col-span-3 text-right font-bold text-primary-700">{formatMoney(share)}</div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            }
+
+            if (view === 'allExpenses') {
+                const sortedExpenses = [...expenses].sort((a,b) => new Date(b.date) - new Date(a.date));
+                return (
+                    <div className="max-w-3xl mx-auto min-h-screen pb-10">
+                         <div className="bg-white sticky top-0 z-10 border-b border-primary-100">
+                            <div className="p-4 flex items-center gap-2 max-w-3xl mx-auto">
+                                <button onClick={() => setView('dashboard')} className="p-2 -ml-2 hover:bg-primary-50 rounded-full text-primary-500"><Icons.ArrowLeft /></button>
+                                <h2 className="font-bold text-xl flex-1 text-primary-800">代墊明細管理</h2>
+                            </div>
+                        </div>
+                        <div className="p-4 space-y-3">
+                            {sortedExpenses.map(exp => {
+                                const cat = CATEGORIES.find(c => c.id === exp.category);
+                                const finalTotal = exp.finalTotal !== undefined ? exp.finalTotal : exp.amount;
+                                const baseTWD = exp.baseTWD !== undefined ? exp.baseTWD : exp.amount;
+                                const totalFee = finalTotal - baseTWD;
+                                return (
+                                    <div key={exp.id} className="bg-white p-4 rounded-xl shadow-sm border border-primary-100 flex justify-between items-center hover:border-primary-300 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-500 flex items-center justify-center">{cat.icon}</div>
+                                            <div>
+                                                <div className="font-bold text-primary-800">{exp.title}</div>
+                                                <div className="text-xs text-primary-400 font-medium">
+                                                    {exp.date.split('T')[0]} • {cat.name}
+                                                    {exp.currency === 'JPY' && <span className="ml-1 px-1.5 py-0.5 bg-yellow-50 text-yellow-600 rounded text-[10px] font-bold">JPY</span>}
+                                                    {exp.hasFee && <span className="ml-1 text-primary-500">(含手續費 {formatMoney(totalFee)})</span>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-bold text-lg text-primary-700">{formatMoney(finalTotal)}</div>
+                                            <div className="flex gap-2 justify-end mt-1">
+                                                <button onClick={() => handleEditExpense(exp)} className="text-primary-400 p-1 hover:text-primary-600 hover:bg-primary-50 rounded"><Icons.Edit size={16}/></button>
+                                                <button onClick={() => handleDeleteExpense(exp.id)} className="text-primary-300 p-1 hover:text-rose-500 hover:bg-rose-50 rounded"><Icons.Trash2 size={16}/></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                );
+            }
+
             if (view === 'addRepayment') {
                 return (
-                    <div className="max-w-2xl mx-auto bg-white min-h-screen p-4">
-                        <div className="flex items-center gap-2 mb-6">
-                            <button onClick={() => setView('friendDetail')} className="p-2 -ml-2"><Icons.ArrowLeft /></button>
-                            <h2 className="font-bold text-xl">{editingRepaymentId ? '編輯支付' : '新增支付'}</h2>
+                    <div className="max-w-2xl mx-auto bg-white min-h-screen p-6">
+                         <div className="flex items-center gap-2 mb-8">
+                            <button onClick={() => setView('friendDetail')} className="p-2 -ml-2 text-primary-500 hover:bg-primary-50 rounded-full"><Icons.ArrowLeft /></button>
+                            <h2 className="font-bold text-xl text-primary-800">{editingRepaymentId ? '編輯支付' : '新增支付'}</h2>
                         </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-500 mb-1">支付日期</label>
-                                <input 
-                                    type="date" 
-                                    value={repaymentForm.date}
-                                    onChange={(e) => setRepaymentForm({...repaymentForm, date: e.target.value})}
-                                    className="w-full p-3 bg-gray-50 rounded-xl"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-500 mb-1">支付金額 (日幣)</label>
-                                <input 
-                                    type="number" 
-                                    value={repaymentForm.amount}
-                                    onChange={(e) => setRepaymentForm({...repaymentForm, amount: e.target.value})}
-                                    className="w-full p-3 bg-gray-50 rounded-xl text-2xl font-bold"
-                                    placeholder="0"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-500 mb-1">備註 (選填)</label>
-                                <input 
-                                    type="text" 
-                                    value={repaymentForm.note}
-                                    onChange={(e) => setRepaymentForm({...repaymentForm, note: e.target.value})}
-                                    className="w-full p-3 bg-gray-50 rounded-xl"
-                                    placeholder="例如：先付一半"
-                                />
-                            </div>
-                            <button 
-                                onClick={handleSaveRepayment}
-                                className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl mt-4 hover:bg-emerald-700"
-                            >
-                                確認儲存
-                            </button>
+                        <div className="space-y-6">
+                            <div><label className="block text-xs font-bold text-primary-400 uppercase tracking-wider mb-2">日期</label><input type="date" value={repaymentForm.date} onChange={(e) => setRepaymentForm({...repaymentForm, date: e.target.value})} className="w-full p-4 bg-primary-50 rounded-xl font-bold text-primary-700 outline-none focus:ring-2 focus:ring-primary-400" /></div>
+                            <div><label className="block text-xs font-bold text-primary-400 uppercase tracking-wider mb-2">金額 (TWD)</label><input type="number" value={repaymentForm.amount} onChange={(e) => setRepaymentForm({...repaymentForm, amount: e.target.value})} className="w-full p-4 bg-primary-50 rounded-xl text-3xl font-extrabold outline-none text-primary-800 placeholder-primary-300 focus:ring-2 focus:ring-primary-400" placeholder="0" /></div>
+                            <div><label className="block text-xs font-bold text-primary-400 uppercase tracking-wider mb-2">備註</label><input type="text" value={repaymentForm.note} onChange={(e) => setRepaymentForm({...repaymentForm, note: e.target.value})} className="w-full p-4 bg-primary-50 rounded-xl outline-none focus:ring-2 focus:ring-primary-400 text-primary-700" placeholder="例如：先付一半" /></div>
+                            <button onClick={handleSaveRepayment} className="w-full bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-lg mt-4 hover:bg-emerald-600 transition-colors">確認儲存</button>
                         </div>
                     </div>
                 );
@@ -842,26 +857,20 @@
 
             if (view === 'addFriend') {
                 return (
-                    <div className="max-w-2xl mx-auto bg-white min-h-screen p-4">
-                        <div className="flex items-center gap-2 mb-6">
-                            <button onClick={() => setView('dashboard')} className="p-2 -ml-2"><Icons.ArrowLeft /></button>
-                            <h2 className="font-bold text-xl">成員管理</h2>
+                    <div className="max-w-2xl mx-auto bg-white min-h-screen p-6">
+                        <div className="flex items-center gap-2 mb-8">
+                            <button onClick={() => setView('dashboard')} className="p-2 -ml-2 text-primary-500 hover:bg-primary-50 rounded-full"><Icons.ArrowLeft /></button>
+                            <h2 className="font-bold text-xl text-primary-800">成員管理</h2>
                         </div>
-                        <div className="flex gap-2 mb-6">
-                            <input 
-                                type="text" 
-                                value={newFriendName}
-                                onChange={(e) => setNewFriendName(e.target.value)}
-                                className="flex-1 p-3 bg-gray-50 rounded-xl"
-                                placeholder="輸入名字"
-                            />
-                            <button onClick={handleAddFriend} className="bg-slate-700 text-white px-6 rounded-xl font-bold hover:bg-slate-600">新增</button>
+                        <div className="flex gap-3 mb-8">
+                            <input type="text" value={newFriendName} onChange={(e) => setNewFriendName(e.target.value)} className="flex-1 p-4 bg-primary-50 rounded-xl outline-none focus:ring-2 focus:ring-primary-400 text-primary-700" placeholder="輸入名字" />
+                            <button onClick={handleAddFriend} className="bg-primary-600 text-white px-8 rounded-xl font-bold hover:bg-primary-700 transition-colors shadow-md">新增</button>
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                             {friends.map(f => (
-                                <div key={f.id} className="flex justify-between items-center p-3 border rounded-xl">
-                                    <span className="font-bold">{f.name}</span>
-                                    <button onClick={() => handleDeleteFriend(f.id)} className="text-gray-400 hover:text-red-500"><Icons.Trash2 size={18} /></button>
+                                <div key={f.id} className="flex justify-between items-center p-4 bg-primary-50 rounded-xl border border-primary-100">
+                                    <span className="font-bold text-primary-700">{f.name}</span>
+                                    <button onClick={() => handleDeleteFriend(f.id)} className="text-primary-300 hover:text-rose-500 transition-colors"><Icons.Trash2 size={20} /></button>
                                 </div>
                             ))}
                         </div>
