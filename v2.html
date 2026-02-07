@@ -75,7 +75,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useCallback } = React;
+        const { useState, useEffect, useMemo } = React;
 
         // --- Icons ---
         const Icon = ({ name, size = 20, className, onClick }) => {
@@ -106,6 +106,8 @@
                 Visa: 'fa-brands fa-cc-visa',
                 Mastercard: 'fa-brands fa-cc-mastercard',
                 FileText: 'fa-solid fa-file-invoice-dollar',
+                HandShake: 'fa-solid fa-hand-holding-dollar',
+                Exchange: 'fa-solid fa-arrow-right-arrow-left',
             };
 
             const faClass = iconMap[name] || 'fa-solid fa-circle-question';
@@ -180,14 +182,16 @@
 
         // --- Main Component ---
         const App = () => {
-            const [view, setView] = useState('dashboard'); // dashboard, addExpense, friends, settings, settlement, friendDetail
+            const [view, setView] = useState('dashboard');
             const [phase, setPhase] = useState('trip');
+            const [settlementPhase, setSettlementPhase] = useState('trip'); // For Report Page
             const [selectedDate, setSelectedDate] = useState('');
             const [selectedFriendId, setSelectedFriendId] = useState(null);
 
             // Data State
             const [friends, setFriends] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_friends')) || []; } catch { return []; } });
             const [expenses, setExpenses] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_expenses')) || []; } catch { return []; } });
+            const [repayments, setRepayments] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_repayments')) || []; } catch { return []; } }); // New: Repayments
             const [lastRate, setLastRate] = useState(() => localStorage.getItem('tokyo_last_rate') || '0.22');
             const [rateConfig, setRateConfig] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_rates')) || {}; } catch { return {}; } });
 
@@ -199,11 +203,13 @@
                 date: new Date().toISOString().split('T')[0],
                 paymentMethod: 'cash'
             });
+            const [repaymentForm, setRepaymentForm] = useState({ amount: '', date: new Date().toISOString().split('T')[0], note: '' });
             const [newFriendName, setNewFriendName] = useState('');
 
             // Persistence
             useEffect(() => { localStorage.setItem('tokyo_pro_friends', JSON.stringify(friends)); }, [friends]);
             useEffect(() => { localStorage.setItem('tokyo_pro_expenses', JSON.stringify(expenses)); }, [expenses]);
+            useEffect(() => { localStorage.setItem('tokyo_pro_repayments', JSON.stringify(repayments)); }, [repayments]);
             useEffect(() => { localStorage.setItem('tokyo_last_rate', lastRate); }, [lastRate]);
             useEffect(() => { localStorage.setItem('tokyo_pro_rates', JSON.stringify(rateConfig)); }, [rateConfig]);
 
@@ -241,11 +247,30 @@
                 if (phase === 'trip') setSelectedDate(form.date);
             };
 
+            const handleSaveRepayment = () => {
+                if (!repaymentForm.amount) return alert('請輸入金額');
+                const newData = {
+                    id: Date.now().toString(),
+                    friendId: selectedFriendId,
+                    amount: parseInt(repaymentForm.amount),
+                    date: repaymentForm.date,
+                    note: repaymentForm.note,
+                    type: 'repayment'
+                };
+                setRepayments([newData, ...repayments]);
+                setRepaymentForm({ amount: '', date: new Date().toISOString().split('T')[0], note: '' });
+                setView('friendDetail'); // Go back to detail
+            };
+
             const handleDeleteExpense = (id) => {
                 if(confirm('確定刪除？')) {
                     setExpenses(prev => prev.filter(e => e.id !== id));
                     if(editingId === id) setView('dashboard');
                 }
+            };
+
+            const handleDeleteRepayment = (id) => {
+                if(confirm('確定刪除此還款紀錄？')) setRepayments(prev => prev.filter(r => r.id !== id));
             };
 
             const handleEdit = (exp) => {
@@ -259,7 +284,7 @@
                 setView('addExpense');
             };
 
-            // Derived Data for Views
+            // Derived Data
             const currentPhaseExpenses = expenses.filter(e => e.phase === phase);
             const tripDates = useMemo(() => {
                 if (phase !== 'trip') return [];
@@ -273,20 +298,21 @@
                 }
             }, [tripDates, phase, selectedDate]);
 
-            // Calculations for Settlement
-            const allTransactions = useMemo(() => calculateDebtMatrix(expenses, friends), [expenses, friends]);
-
             // --- View: Settlement (Full Page) ---
             if (view === 'settlement') {
+                // Calculate based on settlementPhase ('pre' or 'trip')
+                const targetExpenses = expenses.filter(e => e.phase === settlementPhase);
+                const transactions = calculateDebtMatrix(targetExpenses, friends);
+                
                 const getName = (id) => id === 'me' ? '我' : friends.find(f => f.id === id)?.name || '未知';
-                const myReceivables = allTransactions.filter(t => t.to === 'me');
-                const myPayables = allTransactions.filter(t => t.from === 'me');
-                const others = allTransactions.filter(t => t.from !== 'me' && t.to !== 'me');
+                const myReceivables = transactions.filter(t => t.to === 'me');
+                const myPayables = transactions.filter(t => t.from === 'me');
+                const others = transactions.filter(t => t.from !== 'me' && t.to !== 'me');
                 const totalReceive = myReceivables.reduce((sum, t) => sum + t.amount, 0);
                 const totalPay = myPayables.reduce((sum, t) => sum + t.amount, 0);
 
                 const copyText = () => {
-                    let text = `【總結算清單】\n`;
+                    let text = `【${settlementPhase === 'pre' ? '出發前' : '旅程中'} 結算清單】\n`;
                     if(myReceivables.length > 0) { text += `\n▼ 我應收：\n`; myReceivables.forEach(t => text += `${getName(t.from)} 給 我: ${formatMoney(t.amount)}\n`); text += `總計: ${formatMoney(totalReceive)}\n`; }
                     if(myPayables.length > 0) { text += `\n▼ 我應付：\n`; myPayables.forEach(t => text += `我 給 ${getName(t.to)}: ${formatMoney(t.amount)}\n`); }
                     if(others.length > 0) { text += `\n▼ 其他人互轉：\n`; others.forEach(t => text += `${getName(t.from)} 給 ${getName(t.to)}: ${formatMoney(t.amount)}\n`); }
@@ -297,10 +323,19 @@
                     <div className="max-w-2xl mx-auto min-h-screen bg-white animate-fade-in flex flex-col">
                         <div className="p-4 border-b border-primary-100 flex items-center gap-3 bg-white sticky top-0 z-10">
                             <button onClick={() => setView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50"><Icon name="ArrowLeft"/></button>
-                            <h2 className="text-xl font-bold text-primary-900">總結算報表</h2>
+                            <h2 className="text-xl font-bold text-primary-900">結算報表</h2>
                             <div className="flex-1"></div>
                             <button onClick={copyText} className="text-sm font-bold bg-primary-800 text-white px-3 py-1.5 rounded-lg shadow-md"><Icon name="Copy" size={14}/> 複製</button>
                         </div>
+                        
+                        {/* Phase Toggle */}
+                        <div className="p-4 pb-0">
+                            <div className="flex bg-primary-50 rounded-xl p-1">
+                                <button onClick={() => setSettlementPhase('pre')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${settlementPhase === 'pre' ? 'bg-white shadow text-primary-800' : 'text-primary-400'}`}>出發前 (總結算)</button>
+                                <button onClick={() => setSettlementPhase('trip')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${settlementPhase === 'trip' ? 'bg-white shadow text-primary-800' : 'text-primary-400'}`}>旅程中 (每日/總結算)</button>
+                            </div>
+                        </div>
+
                         <div className="flex-1 p-4 overflow-y-auto">
                             {/* Summary Cards */}
                             <div className="grid grid-cols-2 gap-4 mb-6">
@@ -359,8 +394,35 @@
                                         </div>
                                     </div>
                                 )}
-                                {allTransactions.length === 0 && <div className="text-center text-primary-300 py-10">目前無須結算</div>}
+                                {transactions.length === 0 && <div className="text-center text-primary-300 py-10">此階段目前無須結算</div>}
                             </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // --- View: Add Repayment ---
+            if (view === 'addRepayment') {
+                return (
+                    <div className="max-w-2xl mx-auto min-h-screen bg-white p-6 animate-fade-in">
+                        <div className="flex items-center gap-3 mb-6">
+                            <button onClick={() => setView('friendDetail')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50"><Icon name="ArrowLeft"/></button>
+                            <h2 className="text-xl font-bold text-primary-900">紀錄還款</h2>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-xs font-bold text-primary-400 block mb-1">日期</label>
+                                <input type="date" value={repaymentForm.date} onChange={e => setRepaymentForm({...repaymentForm, date: e.target.value})} className="w-full bg-primary-50 p-3 rounded-xl font-bold text-primary-800 outline-none" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-primary-400 block mb-1">金額 (TWD)</label>
+                                <input type="number" value={repaymentForm.amount} onChange={e => setRepaymentForm({...repaymentForm, amount: e.target.value})} className="w-full bg-primary-50 p-3 rounded-xl font-bold text-primary-800 outline-none text-2xl" placeholder="0" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-primary-400 block mb-1">備註</label>
+                                <input type="text" value={repaymentForm.note} onChange={e => setRepaymentForm({...repaymentForm, note: e.target.value})} className="w-full bg-primary-50 p-3 rounded-xl font-bold text-primary-800 outline-none" placeholder="例如：還機票錢" />
+                            </div>
+                            <button onClick={handleSaveRepayment} className="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold shadow-lg mt-4">確認新增</button>
                         </div>
                     </div>
                 );
@@ -369,27 +431,57 @@
             // --- View: Friend Detail (Individual Ledger) ---
             if (view === 'friendDetail' && selectedFriendId) {
                 const friend = friends.find(f => f.id === selectedFriendId);
-                // Filter transactions between Me and Friend
+                
+                // 1. Get Expenses
                 const relatedExpenses = expenses.filter(e => {
                     const iPaid = e.paidBy === 'me';
                     const fPaid = e.paidBy === selectedFriendId;
                     const iConsumed = e.payerIds.includes('me');
                     const fConsumed = e.payerIds.includes(selectedFriendId);
-                    // I paid for them OR They paid for me
                     return (iPaid && fConsumed) || (fPaid && iConsumed);
-                }).sort((a,b) => new Date(b.date) - new Date(a.date));
+                });
+
+                // 2. Get Repayments
+                const relatedRepayments = repayments.filter(r => r.friendId === selectedFriendId);
+
+                // 3. Merge & Sort
+                const allItems = [
+                    ...relatedExpenses.map(e => ({ ...e, isRepayment: false })),
+                    ...relatedRepayments.map(r => ({ ...r, isRepayment: true, title: r.note || '還款', date: r.date }))
+                ].sort((a,b) => new Date(b.date) - new Date(a.date));
 
                 let balance = 0; // + means they owe me
-                const detailedList = relatedExpenses.map(e => {
-                    const { perPerson } = calculateSplit(e, friends);
-                    let type, amt;
-                    if (e.paidBy === 'me') {
-                        type = 'i_paid'; amt = perPerson; balance += amt;
+                
+                // Recalculate balance for display
+                const displayList = allItems.map(item => {
+                    let amt = 0;
+                    let type = ''; // i_paid_exp, they_paid_exp, i_got_paid, i_paid_back
+                    
+                    if (!item.isRepayment) {
+                        const { perPerson } = calculateSplit(item, friends);
+                        if (item.paidBy === 'me') {
+                            type = 'i_paid_exp'; amt = perPerson; // I paid exp -> They owe me (+)
+                        } else {
+                            type = 'they_paid_exp'; amt = perPerson; // They paid exp -> I owe them (-)
+                        }
                     } else {
-                        type = 'they_paid'; amt = perPerson; balance -= amt;
+                        // Repayment logic: Assuming user records "They paid me" mostly.
+                        // For simplicity in this me-centric app, let's assume Repayment entry means "Friend gave me money".
+                        // If we want bidirectional, we need a direction field. But usually "Repayment" = "Debt settled".
+                        // Let's assume repayment reduces the absolute debt.
+                        // Actually, let's treat repayment as "Friend pays Me" by default for now unless we add direction.
+                        type = 'they_repaid'; amt = item.amount;
                     }
-                    return { ...e, type, amt };
+                    return { ...item, type, displayAmt: amt };
                 });
+
+                // Calculate Net Balance strictly
+                balance = displayList.reduce((acc, item) => {
+                    if (item.type === 'i_paid_exp') return acc + item.displayAmt;
+                    if (item.type === 'they_paid_exp') return acc - item.displayAmt;
+                    if (item.type === 'they_repaid') return acc - item.displayAmt; // They gave money, debt reduces
+                    return acc;
+                }, 0);
 
                 return (
                      <div className="max-w-2xl mx-auto min-h-screen bg-white animate-fade-in flex flex-col">
@@ -398,25 +490,34 @@
                             <h2 className="text-xl font-bold text-primary-900">{friend?.name} 的帳目細節</h2>
                         </div>
                         <div className={`p-6 text-center ${balance >= 0 ? 'bg-primary-50' : 'bg-rose-50'}`}>
-                            <p className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-1">{balance >= 0 ? '他要給你' : '你要給他'}</p>
+                            <p className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-1">{balance >= 0 ? '目前未結餘額 (他欠你)' : '目前未結餘額 (你欠他)'}</p>
                             <p className={`text-3xl font-black ${balance >= 0 ? 'text-primary-600' : 'text-rose-500'}`}>{formatMoney(Math.abs(balance))}</p>
+                            <button onClick={() => setView('addRepayment')} className="mt-4 bg-white border border-primary-200 text-primary-700 px-4 py-2 rounded-full text-sm font-bold shadow-sm flex items-center gap-2 mx-auto hover:bg-primary-50 transition">
+                                <Icon name="HandShake" size={14} /> 紀錄還款 (他還錢)
+                            </button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                            {detailedList.map(item => (
-                                <div key={item.id} className="bg-white p-3 rounded-xl border border-primary-100 flex justify-between items-center">
+                            {displayList.map((item, idx) => (
+                                <div key={item.id || idx} className={`p-3 rounded-xl border flex justify-between items-center ${item.isRepayment ? 'bg-emerald-50 border-emerald-100' : 'bg-white border-primary-100'}`}>
                                     <div className="flex items-center gap-3">
-                                        <div className={`w-2 h-10 rounded-full ${item.type === 'i_paid' ? 'bg-primary-400' : 'bg-rose-400'}`}></div>
+                                        <div className={`w-2 h-10 rounded-full ${item.type === 'i_paid_exp' ? 'bg-primary-400' : item.isRepayment ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
                                         <div>
                                             <div className="font-bold text-primary-800">{item.title}</div>
-                                            <div className="text-xs text-primary-400">{item.date} • {item.type === 'i_paid' ? '我幫他墊' : '他幫我墊'}</div>
+                                            <div className="text-xs text-primary-400">
+                                                {item.date} • {
+                                                    item.type === 'i_paid_exp' ? '我幫他墊' : 
+                                                    item.type === 'they_paid_exp' ? '他幫我墊' : '他還款給我'
+                                                }
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className={`font-bold ${item.type === 'i_paid' ? 'text-primary-600' : 'text-rose-500'}`}>
-                                        {formatMoney(item.amt)}
+                                    <div className={`font-bold ${item.type === 'i_paid_exp' ? 'text-primary-600' : item.isRepayment ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                        {item.isRepayment ? '-' : ''}{formatMoney(item.displayAmt)}
                                     </div>
+                                    {item.isRepayment && <button onClick={() => handleDeleteRepayment(item.id)} className="text-primary-300 ml-2"><Icon name="Trash2" size={14}/></button>}
                                 </div>
                             ))}
-                            {detailedList.length === 0 && <div className="text-center text-primary-300 py-10">無相關帳目</div>}
+                            {displayList.length === 0 && <div className="text-center text-primary-300 py-10">無相關帳目</div>}
                         </div>
                      </div>
                 );
