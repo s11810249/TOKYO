@@ -145,14 +145,17 @@
         const calculateBaseTWD = (amount, currency, rate) => {
             const num = parseFloat(amount);
             if (isNaN(num)) return 0;
-            return currency === 'JPY' ? Math.round(num * (parseFloat(rate) || 0)) : Math.round(num);
+            // UPDATE: 匯率換算 -> 無條件進位 (Math.ceil)
+            return currency === 'JPY' ? Math.ceil(num * (parseFloat(rate) || 0)) : Math.ceil(num);
         };
 
         const calculateSplit = (expense, allFriends) => {
             const baseTWD = expense.baseTWD;
+            // UPDATE: 手續費 -> 四捨五入 (Math.round)
             const finalTotal = expense.hasFee ? Math.round(baseTWD * 1.015) : baseTWD;
             const count = expense.payerIds.length;
-            const perPerson = count > 0 ? Math.round(finalTotal / count) : 0;
+            // UPDATE: 拆分 -> 無條件進位 (Math.ceil) 以確保不虧本
+            const perPerson = count > 0 ? Math.ceil(finalTotal / count) : 0;
             return { finalTotal, perPerson };
         };
 
@@ -184,14 +187,15 @@
         const App = () => {
             const [view, setView] = useState('dashboard');
             const [phase, setPhase] = useState('trip');
-            const [settlementPhase, setSettlementPhase] = useState('trip'); // For Report Page
+            const [settlementPhase, setSettlementPhase] = useState('trip');
             const [selectedDate, setSelectedDate] = useState('');
+            const [reportDate, setReportDate] = useState('all'); 
             const [selectedFriendId, setSelectedFriendId] = useState(null);
 
             // Data State
             const [friends, setFriends] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_friends')) || []; } catch { return []; } });
             const [expenses, setExpenses] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_expenses')) || []; } catch { return []; } });
-            const [repayments, setRepayments] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_repayments')) || []; } catch { return []; } }); // New: Repayments
+            const [repayments, setRepayments] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_repayments')) || []; } catch { return []; } });
             const [lastRate, setLastRate] = useState(() => localStorage.getItem('tokyo_last_rate') || '0.22');
             const [rateConfig, setRateConfig] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_rates')) || {}; } catch { return {}; } });
 
@@ -259,7 +263,7 @@
                 };
                 setRepayments([newData, ...repayments]);
                 setRepaymentForm({ amount: '', date: new Date().toISOString().split('T')[0], note: '' });
-                setView('friendDetail'); // Go back to detail
+                setView('friendDetail'); 
             };
 
             const handleDeleteExpense = (id) => {
@@ -287,10 +291,10 @@
             // Derived Data
             const currentPhaseExpenses = expenses.filter(e => e.phase === phase);
             const tripDates = useMemo(() => {
-                if (phase !== 'trip') return [];
-                const dates = [...new Set(currentPhaseExpenses.map(e => e.date))];
+                const tripExps = expenses.filter(e => e.phase === 'trip');
+                const dates = [...new Set(tripExps.map(e => e.date))];
                 return dates.sort((a, b) => new Date(b) - new Date(a));
-            }, [currentPhaseExpenses, phase]);
+            }, [expenses]);
 
             useEffect(() => {
                 if (phase === 'trip' && tripDates.length > 0 && !tripDates.includes(selectedDate)) {
@@ -300,8 +304,18 @@
 
             // --- View: Settlement (Full Page) ---
             if (view === 'settlement') {
-                // Calculate based on settlementPhase ('pre' or 'trip')
-                const targetExpenses = expenses.filter(e => e.phase === settlementPhase);
+                // Determine expenses to calculate
+                let targetExpenses = [];
+                if (settlementPhase === 'pre') {
+                    targetExpenses = expenses.filter(e => e.phase === 'pre');
+                } else {
+                    // Trip Phase: Filter by reportDate
+                    targetExpenses = expenses.filter(e => e.phase === 'trip');
+                    if (reportDate !== 'all') {
+                        targetExpenses = targetExpenses.filter(e => e.date === reportDate);
+                    }
+                }
+
                 const transactions = calculateDebtMatrix(targetExpenses, friends);
                 
                 const getName = (id) => id === 'me' ? '我' : friends.find(f => f.id === id)?.name || '未知';
@@ -312,7 +326,10 @@
                 const totalPay = myPayables.reduce((sum, t) => sum + t.amount, 0);
 
                 const copyText = () => {
-                    let text = `【${settlementPhase === 'pre' ? '出發前' : '旅程中'} 結算清單】\n`;
+                    let title = settlementPhase === 'pre' ? '出發前' : '旅程中';
+                    if (settlementPhase === 'trip' && reportDate !== 'all') title += ` (${reportDate})`;
+                    
+                    let text = `【${title} 結算清單】\n`;
                     if(myReceivables.length > 0) { text += `\n▼ 我應收：\n`; myReceivables.forEach(t => text += `${getName(t.from)} 給 我: ${formatMoney(t.amount)}\n`); text += `總計: ${formatMoney(totalReceive)}\n`; }
                     if(myPayables.length > 0) { text += `\n▼ 我應付：\n`; myPayables.forEach(t => text += `我 給 ${getName(t.to)}: ${formatMoney(t.amount)}\n`); }
                     if(others.length > 0) { text += `\n▼ 其他人互轉：\n`; others.forEach(t => text += `${getName(t.from)} 給 ${getName(t.to)}: ${formatMoney(t.amount)}\n`); }
@@ -330,10 +347,25 @@
                         
                         {/* Phase Toggle */}
                         <div className="p-4 pb-0">
-                            <div className="flex bg-primary-50 rounded-xl p-1">
+                            <div className="flex bg-primary-50 rounded-xl p-1 mb-4">
                                 <button onClick={() => setSettlementPhase('pre')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${settlementPhase === 'pre' ? 'bg-white shadow text-primary-800' : 'text-primary-400'}`}>出發前 (總結算)</button>
                                 <button onClick={() => setSettlementPhase('trip')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${settlementPhase === 'trip' ? 'bg-white shadow text-primary-800' : 'text-primary-400'}`}>旅程中 (每日/總結算)</button>
                             </div>
+
+                            {/* Date Selector for Trip Phase */}
+                            {settlementPhase === 'trip' && tripDates.length > 0 && (
+                                <div className="relative mb-2">
+                                    <select 
+                                        value={reportDate} 
+                                        onChange={(e) => setReportDate(e.target.value)}
+                                        className="w-full appearance-none bg-primary-50 border border-primary-200 p-3 pl-4 pr-10 rounded-xl font-bold text-primary-800 outline-none focus:border-primary-400 transition"
+                                    >
+                                        <option value="all">全部日期 (總結算)</option>
+                                        {tripDates.map(date => <option key={date} value={date}>{date}</option>)}
+                                    </select>
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-primary-500 pointer-events-none"><Icon name="ChevronDown" size={14} /></div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex-1 p-4 overflow-y-auto">
@@ -394,7 +426,7 @@
                                         </div>
                                     </div>
                                 )}
-                                {transactions.length === 0 && <div className="text-center text-primary-300 py-10">此階段目前無須結算</div>}
+                                {transactions.length === 0 && <div className="text-center text-primary-300 py-10">此階段/日期目前無須結算</div>}
                             </div>
                         </div>
                     </div>
@@ -432,7 +464,6 @@
             if (view === 'friendDetail' && selectedFriendId) {
                 const friend = friends.find(f => f.id === selectedFriendId);
                 
-                // 1. Get Expenses
                 const relatedExpenses = expenses.filter(e => {
                     const iPaid = e.paidBy === 'me';
                     const fPaid = e.paidBy === selectedFriendId;
@@ -441,45 +472,36 @@
                     return (iPaid && fConsumed) || (fPaid && iConsumed);
                 });
 
-                // 2. Get Repayments
                 const relatedRepayments = repayments.filter(r => r.friendId === selectedFriendId);
 
-                // 3. Merge & Sort
                 const allItems = [
                     ...relatedExpenses.map(e => ({ ...e, isRepayment: false })),
                     ...relatedRepayments.map(r => ({ ...r, isRepayment: true, title: r.note || '還款', date: r.date }))
                 ].sort((a,b) => new Date(b.date) - new Date(a.date));
 
-                let balance = 0; // + means they owe me
+                let balance = 0; 
                 
-                // Recalculate balance for display
                 const displayList = allItems.map(item => {
                     let amt = 0;
-                    let type = ''; // i_paid_exp, they_paid_exp, i_got_paid, i_paid_back
+                    let type = ''; 
                     
                     if (!item.isRepayment) {
                         const { perPerson } = calculateSplit(item, friends);
                         if (item.paidBy === 'me') {
-                            type = 'i_paid_exp'; amt = perPerson; // I paid exp -> They owe me (+)
+                            type = 'i_paid_exp'; amt = perPerson; 
                         } else {
-                            type = 'they_paid_exp'; amt = perPerson; // They paid exp -> I owe them (-)
+                            type = 'they_paid_exp'; amt = perPerson; 
                         }
                     } else {
-                        // Repayment logic: Assuming user records "They paid me" mostly.
-                        // For simplicity in this me-centric app, let's assume Repayment entry means "Friend gave me money".
-                        // If we want bidirectional, we need a direction field. But usually "Repayment" = "Debt settled".
-                        // Let's assume repayment reduces the absolute debt.
-                        // Actually, let's treat repayment as "Friend pays Me" by default for now unless we add direction.
                         type = 'they_repaid'; amt = item.amount;
                     }
                     return { ...item, type, displayAmt: amt };
                 });
 
-                // Calculate Net Balance strictly
                 balance = displayList.reduce((acc, item) => {
                     if (item.type === 'i_paid_exp') return acc + item.displayAmt;
                     if (item.type === 'they_paid_exp') return acc - item.displayAmt;
-                    if (item.type === 'they_repaid') return acc - item.displayAmt; // They gave money, debt reduces
+                    if (item.type === 'they_repaid') return acc - item.displayAmt; 
                     return acc;
                 }, 0);
 
