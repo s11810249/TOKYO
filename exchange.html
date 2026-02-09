@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>代墊匯差計算機 Detail</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f4f7fb',
+                            100: '#e9eef5',
+                            200: '#cedce9',
+                            300: '#a2bed7',
+                            400: '#709bc0',
+                            500: '#4a78a0',
+                            600: '#3c658d',
+                            700: '#315273',
+                            800: '#2c4660',
+                            900: '#293c51',
+                            950: '#1b2736',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'Noto Sans TC', 'sans-serif'],
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', "Liberation Mono", "Courier New", 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+        .result-card {
+            background-color: white;
+            border-radius: 1rem;
+            padding: 1.25rem;
+            border: 1px solid #e9eef5;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .formula-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem; /* text-xs */
+            color: #4a78a0; /* primary-500 */
+            padding-top: 0.25rem;
+            padding-bottom: 0.25rem;
+        }
+        .formula-val {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-weight: 700;
+            color: #3c658d; /* primary-600 */
+        }
+    </style>
+</head>
+<body class="bg-primary-50 text-primary-900 min-h-screen flex justify-center p-4 selection:bg-primary-200">
+
+    <div class="w-full max-w-md space-y-5 pb-10">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center py-2">
+            <div>
+                <h1 class="text-2xl font-bold text-primary-900 tracking-tight">代墊匯差計算</h1>
+            </div>
+            <button onclick="resetAll()" class="text-xs font-semibold text-primary-400 hover:text-red-500 transition-colors px-3 py-1 rounded-full border border-primary-200 hover:border-red-200">
+                清除重置
+            </button>
+        </div>
+
+        <!-- 匯率設定 -->
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-primary-100 space-y-4">
+            <div class="flex items-center space-x-2 border-b border-primary-50 pb-2 mb-2">
+                <h2 class="text-sm font-bold text-primary-700">匯率設定</h2>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-primary-400 mb-1">刷卡當日匯率 (TWD/JPY)</label>
+                    <input type="number" id="cardRate" step="0.0001" placeholder="例如 0.22" 
+                        class="w-full bg-primary-50 border-0 rounded-xl px-4 py-3 text-lg font-bold text-primary-900 focus:ring-2 focus:ring-primary-500 placeholder-primary-200 transition-all text-center"
+                        oninput="saveSettings()">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-primary-400 mb-1">即期買入</label>
+                        <input type="number" id="spotBuy" step="0.0001" placeholder="0.2002" 
+                            class="w-full bg-primary-50 border-0 rounded-xl px-3 py-2 text-base font-bold text-primary-800 focus:ring-2 focus:ring-primary-500 placeholder-primary-200 text-center"
+                            oninput="saveSettings()">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-primary-400 mb-1">現鈔買入</label>
+                        <input type="number" id="cashBuy" step="0.0001" placeholder="0.1937" 
+                            class="w-full bg-primary-50 border-0 rounded-xl px-3 py-2 text-base font-bold text-primary-800 focus:ring-2 focus:ring-primary-500 placeholder-primary-200 text-center"
+                            oninput="saveSettings()">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 金額計算 -->
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-primary-100 relative overflow-hidden">
+            
+            <label class="block text-sm font-bold text-primary-700 mb-2">消費金額 (JPY)</label>
+            <div class="relative">
+                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-primary-300 text-xl font-bold">¥</span>
+                <input type="number" id="amount" placeholder="輸入日幣金額" 
+                    class="w-full pl-10 pr-4 py-4 text-3xl font-bold text-primary-900 bg-white border-2 border-primary-100 rounded-xl focus:border-primary-500 focus:outline-none transition-colors"
+                    onkeydown="if(event.key==='Enter') calculate()">
+            </div>
+
+            <div class="mt-4 flex items-center justify-between bg-primary-50 p-3 rounded-xl cursor-pointer" onclick="document.getElementById('addFee').click()">
+                <div class="flex items-center space-x-3">
+                    <div class="relative flex items-start">
+                        <div class="flex items-center h-5">
+                            <input id="addFee" type="checkbox" checked class="h-5 w-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500">
+                        </div>
+                        <div class="ml-3 text-sm">
+                            <label for="addFee" class="font-bold text-primary-700">加上 1.5% 手續費</label>
+                            <p class="text-xs text-primary-400">依刷卡台幣四捨五入</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="calculate()" class="w-full mt-5 bg-primary-800 hover:bg-primary-900 text-white text-lg font-bold py-3.5 rounded-xl transition-all active:scale-[0.98]">
+                開始計算
+            </button>
+        </div>
+
+        <!-- 結果顯示區 -->
+        <div id="resultSection" class="hidden space-y-4 animate-fade-in">
+            
+            <!-- 選項 1: 收台幣 -->
+            <div class="result-card">
+                <h3 class="text-sm font-bold text-primary-500 mb-2">收台幣</h3>
+                
+                <div class="flex items-baseline space-x-1 mb-3">
+                    <span class="text-lg font-semibold text-primary-900">$</span>
+                    <span id="resTwd" class="text-4xl font-bold text-primary-900 tracking-tight">0</span>
+                </div>
+                
+                <!-- 詳細算式 -->
+                <div class="bg-primary-50 rounded-lg p-3 space-y-1">
+                    <!-- 行 1: 匯率換算 -->
+                    <div class="formula-row">
+                        <span>1. 匯率換算</span>
+                        <span class="formula-val" id="f_twd_base"></span>
+                    </div>
+                    <!-- 行 2: 手續費 (如果有) -->
+                    <div id="row_fee" class="formula-row border-t border-primary-200/50 mt-1 pt-1">
+                        <span>2. 手續費 (1.5%)</span>
+                        <span class="formula-val" id="f_twd_fee"></span>
+                    </div>
+                    <!-- 行 3: 總計 -->
+                    <div class="formula-row border-t border-primary-200 mt-1 pt-1">
+                        <span class="font-bold text-primary-800">總計 (無條件進位)</span>
+                        <span class="font-bold text-primary-900" id="f_twd_total"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 選項 2: 收日幣 -->
+            <div class="result-card">
+                <h3 class="text-sm font-bold text-primary-500 mb-2">收日幣</h3>
+                
+                <div class="flex items-baseline space-x-1 mb-3">
+                    <span class="text-lg font-semibold text-primary-900">¥</span>
+                    <span id="resJpy" class="text-4xl font-bold text-primary-900 tracking-tight">0</span>
+                </div>
+
+                <!-- 詳細算式 -->
+                <div class="bg-primary-50 rounded-lg p-3 space-y-1">
+                    <!-- 行 1: 計算存入成本 -->
+                    <div class="formula-row">
+                         <!-- 顯示: (即期-現鈔)*0.5 -->
+                        <span>1. 存入成本/円</span>
+                        <span class="formula-val" id="f_jpy_cost"></span>
+                    </div>
+                     <!-- 行 2: 有效匯率 -->
+                     <div class="formula-row">
+                        <span>2. 有效匯率 (即期-成本)</span>
+                        <span class="formula-val" id="f_jpy_rate"></span>
+                    </div>
+                     <!-- 行 3: 逆推 -->
+                    <div class="formula-row border-t border-primary-200 mt-1 pt-1">
+                        <span class="font-bold text-primary-800">應收 (台幣÷有效匯率)</span>
+                        <span class="font-bold text-primary-900" id="f_jpy_total"></span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        window.onload = function() { loadSettings(); };
+
+        function saveSettings() {
+            localStorage.setItem('c_cardRate', document.getElementById('cardRate').value);
+            localStorage.setItem('c_spotBuy', document.getElementById('spotBuy').value);
+            localStorage.setItem('c_cashBuy', document.getElementById('cashBuy').value);
+        }
+
+        function loadSettings() {
+            const cardRate = localStorage.getItem('c_cardRate');
+            const spotBuy = localStorage.getItem('c_spotBuy');
+            const cashBuy = localStorage.getItem('c_cashBuy');
+            if (cardRate) document.getElementById('cardRate').value = cardRate;
+            if (spotBuy) document.getElementById('spotBuy').value = spotBuy;
+            if (cashBuy) document.getElementById('cashBuy').value = cashBuy;
+        }
+
+        function resetAll() {
+            if(confirm("確定要重置所有設定嗎？")) {
+                localStorage.clear();
+                location.reload();
+            }
+        }
+
+        function formatNum(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        function calculate() {
+            const cardRate = parseFloat(document.getElementById('cardRate').value);
+            const spotBuy = parseFloat(document.getElementById('spotBuy').value);
+            const cashBuy = parseFloat(document.getElementById('cashBuy').value);
+            const amount = parseFloat(document.getElementById('amount').value);
+            const addFee = document.getElementById('addFee').checked;
+
+            if (!cardRate || !spotBuy || !cashBuy || !amount) {
+                alert("請完整輸入所有欄位數值");
+                return;
+            }
+
+            // === 運算 ===
+            const baseTwd = amount * cardRate; 
+            const feeTwd = addFee ? Math.round(baseTwd * 0.015) : 0;
+            const totalTwd = Math.ceil(baseTwd + feeTwd);
+
+            const costPerUnit = (spotBuy - cashBuy) * 0.5;
+            const effectiveRate = spotBuy - costPerUnit;
+            const totalJpy = Math.ceil(totalTwd / effectiveRate);
+
+            // === 渲染大數字 ===
+            document.getElementById('resTwd').innerText = formatNum(totalTwd);
+            document.getElementById('resJpy').innerText = formatNum(totalJpy);
+
+            // === 渲染算式細節 (台幣) ===
+            // 1. 基礎
+            document.getElementById('f_twd_base').innerText = `¥${formatNum(amount)} × ${cardRate} = $${formatNum(Math.round(baseTwd))}`;
+            
+            // 2. 手續費
+            const feeRow = document.getElementById('row_fee');
+            if(addFee) {
+                feeRow.classList.remove('hidden');
+                feeRow.classList.add('flex'); // 確保是 flex 佈局
+                document.getElementById('f_twd_fee').innerText = `$${formatNum(Math.round(baseTwd))} × 1.5% = $${feeTwd}`;
+                document.getElementById('f_twd_total').innerText = `$${formatNum(Math.round(baseTwd))} + $${feeTwd} = $${formatNum(totalTwd)}`;
+            } else {
+                feeRow.classList.add('hidden');
+                feeRow.classList.remove('flex');
+                document.getElementById('f_twd_total').innerText = `$${formatNum(Math.round(baseTwd))} (無手續費)`;
+            }
+
+            // === 渲染算式細節 (日幣) ===
+            // 1. 成本
+            // 顯示: (0.2002 - 0.1937) * 0.5 = 0.00325
+            document.getElementById('f_jpy_cost').innerText = `(${spotBuy}-${cashBuy}) × 0.5 = ${costPerUnit.toFixed(5)}`;
+            
+            // 2. 有效匯率
+            // 顯示: 0.2002 - 0.00325 = 0.19695
+            document.getElementById('f_jpy_rate').innerText = `${spotBuy} - ${costPerUnit.toFixed(5)} = ${effectiveRate.toFixed(5)}`;
+            
+            // 3. 總計
+            document.getElementById('f_jpy_total').innerText = `$${formatNum(totalTwd)} ÷ ${effectiveRate.toFixed(5)} = ¥${formatNum(totalJpy)}`;
+
+
+            // 顯示結果
+            const resultSection = document.getElementById('resultSection');
+            resultSection.classList.remove('hidden');
+            setTimeout(() => {
+                resultSection.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }, 100);
+        }
+    </script>
+</body>
+</html>
+
