@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>行前費用說明</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f3f4f6;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .card {
+            background: white;
+            width: 100%;
+            max-width: 100%;
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            margin: auto;
+        }
+        .header {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            padding: 24px 24px 20px 24px;
+            color: white;
+            text-align: center;
+        }
+        .content {
+            padding: 24px;
+        }
+        .highlight-box {
+            background-color: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+        }
+        .loss-box {
+            background-color: #fff1f2;
+            border: 1px solid #ffe4e6;
+            border-radius: 16px;
+            padding: 16px;
+            margin-top: 12px;
+        }
+        .burden-text {
+            color: #b91c1c; /* red-700 */
+            background-color: #fee2e2; /* red-100 */
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-top: 8px;
+            font-weight: 500;
+        }
+        .jp-tag {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-right: 4px;
+            border: 1px solid;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <!-- 標題區 -->
+        <div class="header">
+            <div class="text-3xl mb-2"><i class="fa-solid fa-wallet"></i></div>
+            <h1 class="text-xl font-bold tracking-wider">代墊費用與結帳說明</h1>
+            <p class="text-xs text-blue-100 mt-1 opacity-90">行前小提醒，請大家花 1 分鐘閱讀</p>
+        </div>
+
+        <!-- 內容區 -->
+        <div class="content space-y-5">
+            
+            <!-- 前言 (已修正) -->
+            <p class="text-sm text-gray-600 leading-relaxed">
+                這次部分餐廳不提供現金付款，還有部分的訂金我已先刷卡代墊。為了讓結帳順利並減少雙方困擾，有四點想請大家幫忙配合：
+            </p>
+
+            <!-- 重點 1 (含稅未稅) -->
+            <div>
+                <h3 class="font-bold text-gray-800 flex items-center mb-2">
+                    <span class="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2 font-bold shrink-0">1</span>
+                    確認金額：含稅 vs 未稅
+                </h3>
+                <div class="pl-8 text-sm text-gray-600 space-y-2">
+                    <p class="mb-1 text-xs text-gray-500">日本菜單有分兩種標示，請以「最終金額」為準：</p>
+                    <div class="flex items-center flex-wrap gap-1">
+                        <span class="jp-tag bg-green-50 text-green-700 border-green-200">税込</span>
+                        <span class="text-xs text-gray-500">= 含稅 (標價即為結帳金額) ✅</span>
+                    </div>
+                    <div class="flex items-center flex-wrap gap-1">
+                        <span class="jp-tag bg-gray-50 text-gray-500 border-gray-200">税抜</span>
+                        <span class="text-xs text-gray-500">= 未稅 (結帳需再 +10%) ⚠️</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 重點 2 -->
+            <div>
+                <h3 class="font-bold text-gray-800 flex items-center mb-1">
+                    <span class="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2 font-bold shrink-0">2</span>
+                    關於 1.5% 手續費
+                </h3>
+                <p class="text-sm text-gray-600 pl-8">
+                    海外刷卡銀行會收取交易手續費，這筆費用我也會一併列入大家的應付金額中。
+                </p>
+            </div>
+
+            <!-- 重點 3 (修正：具體數字比較) -->
+            <div>
+                <h3 class="font-bold text-gray-800 flex items-center mb-1">
+                    <span class="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2 font-bold shrink-0">3</span>
+                    其實刷卡比換現鈔划算！
+                </h3>
+                <p class="text-sm text-gray-600 pl-8 leading-relaxed">
+                    即便加了手續費，刷卡匯率通常還是優於銀行現鈔賣出價。
+                    <span class="block mt-1 text-xs text-blue-600 bg-blue-50 p-2 rounded border border-blue-100 font-medium leading-relaxed">
+                        <i class="fa-solid fa-calculator mr-1"></i>
+                        例：10 萬日幣<br>
+                        換現鈔約 <span class="font-bold text-gray-700">$20,590</span><br>
+                        刷卡約 <span class="font-bold text-gray-700">$20,220</span> + $303 (手續費) = <span class="font-bold text-blue-700">$20,523</span>
+                    </span>
+                </p>
+            </div>
+
+            <!-- 重點 4 (核心) -->
+            <div>
+                <h3 class="font-bold text-gray-800 flex items-center mb-1">
+                    <span class="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2 font-bold shrink-0">4</span>
+                    建議優先給我「台幣」
+                </h3>
+                <div class="pl-8">
+                    <p class="text-sm text-gray-600 mb-2">
+                        雖然日幣也是錢，但我繳卡費必須用台幣。若收日幣現鈔，我回台換匯會產生匯差損失。
+                    </p>
+                    <div class="burden-text">
+                        <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+                        這幾天行程累積下來，這筆匯差對我來說會是一筆不小的額外負擔，還請大家多多體諒 🙏
+                    </div>
+                </div>
+            </div>
+
+            <!-- 比較圖表 -->
+            <div class="loss-box">
+                <h4 class="text-center font-bold text-gray-800 mb-3 border-b border-red-200 pb-2 text-sm">
+                    為什麼給日幣會變貴？
+                </h4>
+                
+                <!-- 選項 A -->
+                <div class="flex justify-between items-center mb-3">
+                    <div class="flex flex-col">
+                        <span class="text-sm font-bold text-blue-700"><i class="fa-solid fa-check mr-1"></i> 給我台幣</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="block text-sm font-bold text-gray-800">$20,523</span>
+                        <span class="text-[10px] text-gray-400">含手續費</span>
+                    </div>
+                </div>
+
+                <!-- 選項 B -->
+                <div class="flex justify-between items-center pt-2 border-t border-dashed border-red-300">
+                    <div class="flex flex-col">
+                        <span class="text-sm font-bold text-gray-500">給我日幣</span>
+                        <span class="text-[10px] text-gray-400">當然也可以收，但...</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="block text-sm font-bold text-red-600">¥104,443</span>
+                        <span class="text-[10px] text-red-500 font-bold">+ 4,000円 匯差</span>
+                    </div>
+                </div>
+                
+                <p class="text-[11px] text-gray-500 mt-3 leading-tight">
+                    * 為了不讓我貼錢換匯，若給日幣，我會透過程式計算加上匯差。這筆差額不如大家自己留著花費更划算！
+                </p>
+            </div>
+
+            <!-- 匯差小教室 -->
+            <div class="bg-gray-50 p-3 rounded-xl border border-gray-100 mt-4">
+                <h4 class="font-bold text-gray-700 text-xs mb-1 flex items-center">
+                    <i class="fa-solid fa-graduation-cap text-blue-500 mr-1"></i>
+                    小知識：什麼是匯差？
+                </h4>
+                <p class="text-[11px] text-gray-500 leading-relaxed text-justify">
+                    簡單說就是銀行賺的「買賣價差」。
+                    <br>
+                    銀行賣日幣給我們時比較貴 (賣出價)，但跟我們買回日幣時卻很便宜 (買入價)。
+                    <br>
+                    若收日幣現鈔，我拿去銀行換回台幣時，中間憑空消失的錢就是被銀行賺走了，這筆虧損就是我要自行吸收的，所以才需要補貼這筆金額。
+                </p>
+            </div>
+
+            <!-- 底部註記 -->
+            <div class="text-center border-t border-gray-100 pt-4">
+                <p class="text-[10px] text-gray-400">
+                    * 以上金額範例採用 2026/02/10 匯率計算
+                </p>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>
+
