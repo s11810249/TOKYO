@@ -126,6 +126,7 @@
                 Jcb: 'fa-brands fa-cc-jcb', 
                 Xmark: 'fa-solid fa-xmark',
                 Bars: 'fa-solid fa-bars',
+                FileInvoiceDollar: 'fa-solid fa-file-invoice-dollar',
             };
 
             const faClass = iconMap[name] || 'fa-solid fa-circle-question';
@@ -173,6 +174,20 @@
             const count = expense.payerIds.length;
             const perPerson = count > 0 ? Math.ceil(finalTotal / count) : 0;
             return { finalTotal, perPerson };
+        };
+
+        const calculateFriendShare = (exp, targetId) => {
+            if (!exp.payerIds.includes(targetId)) return 0;
+            const baseTWD = exp.baseTWD;
+            const finalTotal = exp.hasFee ? Math.round(baseTWD * 1.015) : baseTWD;
+
+            if (exp.splitMode === 'exact') {
+                const exactAmt = parseFloat(exp.exactAmounts[targetId] || 0);
+                const targetBaseTWD = calculateBaseTWD(exactAmt, exp.currency, exp.rate);
+                return exp.hasFee ? Math.round(targetBaseTWD * 1.015) : targetBaseTWD;
+            } else {
+                return Math.ceil(finalTotal / exp.payerIds.length);
+            }
         };
 
         // --- Main Component ---
@@ -670,6 +685,102 @@
                 );
             }
 
+            // --- View: Summary (Checkout / Settlement) ---
+            if (view === 'summary') {
+                const currentPhaseExpenses = expenses.filter(e => e.phase === phase);
+
+                const balances = friends.map(friend => {
+                    let oweMe = 0; // friend owes me
+                    let iOwe = 0;  // I owe friend
+
+                    currentPhaseExpenses.forEach(exp => {
+                        // 如果是我先付的，計算該朋友該給我多少
+                        if (exp.paidBy === 'me') {
+                            if (exp.payerIds.includes(friend.id)) {
+                                oweMe += calculateFriendShare(exp, friend.id);
+                            }
+                        } 
+                        // 如果是該朋友先付的，計算我該給他多少
+                        else if (exp.paidBy === friend.id) {
+                            if (exp.payerIds.includes('me')) {
+                                iOwe += calculateFriendShare(exp, 'me');
+                            }
+                        }
+                    });
+
+                    return {
+                        ...friend,
+                        oweMe,
+                        iOwe,
+                        netBalance: oweMe - iOwe // 正數代表我該收的，負數代表我該付的
+                    };
+                });
+
+                const totalToCollect = balances.reduce((sum, b) => b.netBalance > 0 ? sum + b.netBalance : sum, 0);
+                const totalToPay = balances.reduce((sum, b) => b.netBalance < 0 ? sum + Math.abs(b.netBalance) : sum, 0);
+
+                return (
+                    <div className="max-w-3xl mx-auto min-h-screen bg-white flex flex-col animate-fade-in relative pb-24">
+                        <div className="bg-white sticky top-0 z-20 shadow-sm border-b border-primary-100">
+                            <div className="px-5 pt-6 pb-2 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <button onClick={() => setView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50 transition active:scale-95"><Icon name="ArrowLeft" size={20}/></button>
+                                    <h2 className="text-2xl font-black text-primary-900 tracking-tight">結算總覽</h2>
+                                </div>
+                            </div>
+                            <div className="flex px-5 pb-4 gap-4 mt-2">
+                                <button onClick={() => setPhase('pre')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${phase === 'pre' ? 'bg-amber-100 text-amber-900 shadow-inner' : 'bg-primary-50 text-primary-400 hover:bg-primary-100'}`}><Icon name="Calendar" size={16}/> 出發前</button>
+                                <button onClick={() => setPhase('trip')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${phase === 'trip' ? 'bg-emerald-100 text-emerald-900 shadow-inner' : 'bg-primary-50 text-primary-400 hover:bg-primary-100'}`}><Icon name="MapPlane" size={16}/> 旅程中</button>
+                            </div>
+                        </div>
+
+                        <div className="p-5">
+                            <div className="grid grid-cols-2 gap-4 mb-6">
+                                <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100 shadow-sm">
+                                    <div className="text-[11px] font-bold text-emerald-600 mb-1 flex items-center gap-1.5 uppercase tracking-wider"><Icon name="FileInvoiceDollar" size={14}/> 總應收 (別人欠我)</div>
+                                    <div className="text-3xl font-black text-emerald-700 mt-2">{formatMoney(totalToCollect)}</div>
+                                </div>
+                                <div className="bg-rose-50 rounded-2xl p-4 border border-rose-100 shadow-sm">
+                                    <div className="text-[11px] font-bold text-rose-600 mb-1 flex items-center gap-1.5 uppercase tracking-wider"><Icon name="Cash" size={14}/> 總應付 (我欠別人)</div>
+                                    <div className="text-3xl font-black text-rose-700 mt-2">{formatMoney(totalToPay)}</div>
+                                </div>
+                            </div>
+
+                            <h3 className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-3 pl-1">成員明細</h3>
+                            <div className="space-y-3">
+                                {balances.length === 0 ? (
+                                    <div className="text-center py-12 text-primary-300 text-sm font-bold bg-primary-50 rounded-2xl border border-primary-100">尚未新增成員</div>
+                                ) : (
+                                    balances.map(b => (
+                                        <div key={b.id} className="bg-white border border-primary-100 rounded-2xl p-5 flex items-center justify-between shadow-[0_2px_8px_-3px_rgba(0,0,0,0.05)]">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-full bg-primary-100 text-primary-700 font-bold flex items-center justify-center text-lg">{b.name[0]}</div>
+                                                <span className="font-bold text-primary-900 text-lg tracking-wide">{b.name}</span>
+                                            </div>
+                                            <div className="text-right">
+                                                {b.netBalance > 0 ? (
+                                                    <div>
+                                                        <div className="text-[10px] font-bold text-emerald-500 mb-0.5 uppercase tracking-wider">應向他收</div>
+                                                        <div className="font-black text-emerald-600 text-xl">{formatMoney(b.netBalance)}</div>
+                                                    </div>
+                                                ) : b.netBalance < 0 ? (
+                                                    <div>
+                                                        <div className="text-[10px] font-bold text-rose-500 mb-0.5 uppercase tracking-wider">應付給他</div>
+                                                        <div className="font-black text-rose-600 text-xl">{formatMoney(Math.abs(b.netBalance))}</div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="font-bold text-primary-400 bg-primary-50 px-4 py-2 rounded-xl text-sm border border-primary-100">已結清</div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
             // --- View: Dashboard ---
             const expensesToRender = phase === 'pre' ? currentPhaseExpenses : selectedDateExpenses;
 
@@ -703,11 +814,19 @@
                     )}
 
                     <div className="bg-white sticky top-0 z-10 shadow-sm border-b border-primary-100">
-                        <div className="px-5 pt-6 pb-2 flex items-center gap-3 relative">
-                            <button onClick={() => setIsMenuOpen(true)} className="p-2 -ml-2 text-primary-900 rounded-full hover:bg-primary-50 transition active:scale-95">
-                                <Icon name="Bars" size={24} />
+                        <div className="px-5 pt-6 pb-2 flex items-center justify-between relative">
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setIsMenuOpen(true)} className="p-2 -ml-2 text-primary-900 rounded-full hover:bg-primary-50 transition active:scale-95">
+                                    <Icon name="Bars" size={24} />
+                                </button>
+                                <h1 className="text-2xl font-black text-primary-900 tracking-tight">旅遊分帳</h1>
+                            </div>
+                            
+                            {/* 新增的結算按鈕 */}
+                            <button onClick={() => setView('summary')} className="flex items-center gap-1.5 bg-primary-100 text-primary-700 px-3 py-1.5 rounded-full font-bold text-sm hover:bg-primary-200 transition active:scale-95 shadow-sm">
+                                <Icon name="FileInvoiceDollar" size={14} />
+                                結算
                             </button>
-                            <h1 className="text-2xl font-black text-primary-900 tracking-tight">旅遊分帳</h1>
                         </div>
                         <div className="flex px-5 pb-4 gap-4 mt-2">
                             <button onClick={() => setPhase('pre')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${phase === 'pre' ? 'bg-amber-100 text-amber-900 shadow-inner' : 'bg-primary-50 text-primary-400 hover:bg-primary-100'}`}><Icon name="Calendar" size={16}/> 出發前 (行前款)</button>
