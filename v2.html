@@ -42,9 +42,51 @@
                             900: '#293c51',
                             950: '#1b2736',
                         },
+                        // 莫蘭迪紅 (Morandi Rose)
+                        rose: {
+                            50: '#fdfbfb',
+                            100: '#f6eeed',
+                            200: '#ebd9d6',
+                            300: '#d9bbba',
+                            400: '#c19694',
+                            500: '#a97573',
+                            600: '#8e5d5b',
+                            700: '#774c4a',
+                            800: '#63413f',
+                            900: '#533836',
+                            950: '#2b1a19',
+                        },
+                        // 莫蘭迪綠 (Morandi Emerald)
+                        emerald: {
+                            50: '#f5f8f7',
+                            100: '#e5eeeb',
+                            200: '#caddd8',
+                            300: '#a3c2b8',
+                            400: '#7aa396',
+                            500: '#5b8779',
+                            600: '#466c60',
+                            700: '#3a574d',
+                            800: '#314740',
+                            900: '#2a3b36',
+                            950: '#15211e',
+                        },
+                        // 莫蘭迪黃 (Morandi Amber)
+                        amber: {
+                            50: '#fdfcf9',
+                            100: '#f8f5ee',
+                            200: '#eee6d6',
+                            300: '#e0d1b6',
+                            400: '#cdb690',
+                            500: '#b8996b',
+                            600: '#a38156',
+                            700: '#876747',
+                            800: '#6e543b',
+                            900: '#5a4532',
+                            950: '#302318',
+                        },
                         accent: {
-                            500: '#e11d48',
-                            600: '#be123c',
+                            500: '#a97573',
+                            600: '#8e5d5b',
                         }
                     },
                     fontFamily: {
@@ -120,6 +162,7 @@
                 Wifi: 'fa-solid fa-wifi',
                 Other: 'fa-solid fa-receipt',
                 ArrowLeft: 'fa-solid fa-arrow-left',
+                ArrowRight: 'fa-solid fa-arrow-right',
                 Check: 'fa-solid fa-check',
                 MapPin: 'fa-solid fa-location-dot',
                 Calendar: 'fa-regular fa-calendar-days',
@@ -135,6 +178,9 @@
                 Xmark: 'fa-solid fa-xmark',
                 Bars: 'fa-solid fa-bars',
                 FileInvoiceDollar: 'fa-solid fa-file-invoice-dollar',
+                Wallet: 'fa-solid fa-wallet',
+                RightLeft: 'fa-solid fa-right-left',
+                MoneyBillTransfer: 'fa-solid fa-money-bill-transfer',
             };
 
             const faClass = iconMap[name] || 'fa-solid fa-circle-question';
@@ -194,7 +240,6 @@
                 const originalTotal = parseFloat(exp.originalAmount || 1);
                 if (originalTotal === 0) return 0;
                 
-                // 改用「比例」來分攤最後台幣總額，大幅降低浮點數運算及匯率換算帶來的四捨五入落差
                 const ratio = exactAmt / originalTotal;
                 return Math.round(finalTotal * ratio);
             } else {
@@ -209,13 +254,16 @@
             const [selectedDate, setSelectedDate] = useState('');
             const [isMenuOpen, setIsMenuOpen] = useState(false); 
             
-            // 個人結算明細 Modal 狀態
+            // 個人結算與結帳 Modal 狀態
             const [selectedDetailUserId, setSelectedDetailUserId] = useState(null);
+            // 結帳明細 Tabs (bills = 帳單明細, records = 收付款紀錄)
+            const [detailTab, setDetailTab] = useState('bills');
 
             // Data State
             const [myName, setMyName] = useState(() => localStorage.getItem('tokyo_pro_my_name') || '我自己');
             const [friends, setFriends] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_friends')) || []; } catch { return []; } });
             const [expenses, setExpenses] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_expenses')) || []; } catch { return []; } });
+            const [repayments, setRepayments] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_repayments')) || []; } catch { return []; } });
             const [lastRate, setLastRate] = useState(() => localStorage.getItem('tokyo_last_rate') || '0.22');
             const [rateConfig, setRateConfig] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_rates')) || {}; } catch { return {}; } });
 
@@ -233,41 +281,70 @@
             const [newFriendName, setNewFriendName] = useState('');
             const [isFriendModalOpen, setIsFriendModalOpen] = useState(false);
             
+            // Repayment Form State
+            const [repaymentForm, setRepaymentForm] = useState({
+                payerId: '', payeeId: 'me', amount: '', currency: 'TWD', 
+                date: new Date().toISOString().split('T')[0], refDate: '', spotBuy: '', cashBuy: '', note: ''
+            });
+            
             // Rate Center Modal State
             const [isRateModalOpen, setIsRateModalOpen] = useState(false);
             const [rateForm, setRateForm] = useState({
                 date: new Date().toISOString().split('T')[0],
-                cash: '', visa: '', mastercard: '', jcb: ''
+                cash: '', visa: '', mastercard: '', jcb: '', spotBuy: '', cashBuy: ''
             });
 
             // Persistence
             useEffect(() => { localStorage.setItem('tokyo_pro_my_name', myName); }, [myName]);
             useEffect(() => { localStorage.setItem('tokyo_pro_friends', JSON.stringify(friends)); }, [friends]);
             useEffect(() => { localStorage.setItem('tokyo_pro_expenses', JSON.stringify(expenses)); }, [expenses]);
+            useEffect(() => { localStorage.setItem('tokyo_pro_repayments', JSON.stringify(repayments)); }, [repayments]);
             useEffect(() => { localStorage.setItem('tokyo_last_rate', lastRate); }, [lastRate]);
             useEffect(() => { localStorage.setItem('tokyo_pro_rates', JSON.stringify(rateConfig)); }, [rateConfig]);
 
             // Auto-update rate logic
-            const getRateForConfig = (date, method) => {
+            const getRateForConfig = useCallback((date, method) => {
                 if (rateConfig[date] && rateConfig[date][method]) return rateConfig[date][method];
                 return lastRate;
-            };
+            }, [rateConfig, lastRate]);
 
             useEffect(() => {
                 if (form.currency === 'JPY' && !editingId) {
                     const suggestedRate = getRateForConfig(form.date, form.paymentMethod);
                     setForm(prev => ({ ...prev, rate: suggestedRate }));
                 }
-            }, [form.date, form.paymentMethod, form.currency, rateConfig]);
+            }, [form.date, form.paymentMethod, form.currency, getRateForConfig, editingId]);
+
+            // --- 確保 useEffect 位於最外層 ---
+            useEffect(() => {
+                if (repaymentForm.currency === 'JPY' && repaymentForm.refDate) {
+                    const sBuy = rateConfig[repaymentForm.refDate]?.spotBuy || '';
+                    const cBuy = rateConfig[repaymentForm.refDate]?.cashBuy || '';
+                    setRepaymentForm(prev => ({ ...prev, spotBuy: sBuy, cashBuy: cBuy }));
+                }
+            }, [repaymentForm.refDate, repaymentForm.currency, rateConfig]); 
 
             // Handlers
+            const handleEdit = useCallback((exp) => {
+                setEditingId(exp.id);
+                setForm({
+                    title: exp.title, amount: exp.originalAmount, currency: exp.currency, rate: exp.rate,
+                    category: exp.category, hasFee: exp.hasFee, payerIds: exp.payerIds, paidBy: exp.paidBy,
+                    date: exp.date, paymentMethod: exp.paymentMethod || 'cash',
+                    note: exp.note || '',
+                    splitMode: exp.splitMode || 'equal',
+                    exactAmounts: exp.exactAmounts || {}
+                });
+                setPhase(exp.phase);
+                setView('addExpense');
+            }, []);
+
             const handleSaveExpense = () => {
                 if (!form.title || !form.amount || form.payerIds.length === 0) return alert('請填寫完整資訊');
                 
                 if (form.splitMode === 'exact') {
                     const sumEntered = form.payerIds.reduce((acc, id) => acc + parseFloat(form.exactAmounts[id] || 0), 0);
                     const targetAmount = parseFloat(form.amount);
-                    // 放寬落差驗證，允許小於等於 2 的誤差，避免外幣轉換的極小數落差
                     if (Math.abs(sumEntered - targetAmount) > 2) {
                         return alert(`個別分攤金額總和 (${sumEntered}) 與輸入總金額 (${targetAmount}) 落差過大，請修正後再儲存。`);
                     }
@@ -292,33 +369,62 @@
             };
 
             const handleDeleteExpense = (id) => {
-                if(confirm('確定刪除？')) {
+                if(confirm('確定刪除這筆花費？')) {
                     setExpenses(prev => prev.filter(e => e.id !== id));
                     if(editingId === id) setView('dashboard');
                 }
             };
 
-            const handleEdit = (exp) => {
-                setEditingId(exp.id);
-                setForm({
-                    title: exp.title, amount: exp.originalAmount, currency: exp.currency, rate: exp.rate,
-                    category: exp.category, hasFee: exp.hasFee, payerIds: exp.payerIds, paidBy: exp.paidBy,
-                    date: exp.date, paymentMethod: exp.paymentMethod || 'cash',
-                    note: exp.note || '',
-                    splitMode: exp.splitMode || 'equal',
-                    exactAmounts: exp.exactAmounts || {}
-                });
-                setPhase(exp.phase);
-                setView('addExpense');
+            const handleDeleteRepayment = (id) => {
+                if(confirm('確定刪除這筆還款紀錄？')) {
+                    setRepayments(prev => prev.filter(r => r.id !== id));
+                }
             };
 
-            // 切換視圖時清除 Modal
+            const handleSaveRepayment = () => {
+                if (!repaymentForm.payerId || !repaymentForm.payeeId || !repaymentForm.amount) {
+                    return alert('請填寫完整資訊');
+                }
+                if (repaymentForm.payerId === repaymentForm.payeeId) {
+                    return alert('還款人與收款人不能是同一人');
+                }
+
+                let finalTwdOffset = 0;
+                let effectiveRate = null;
+
+                if (repaymentForm.currency === 'TWD') {
+                    finalTwdOffset = parseInt(repaymentForm.amount);
+                } else {
+                    const sBuy = parseFloat(repaymentForm.spotBuy) || 0;
+                    const cBuy = parseFloat(repaymentForm.cashBuy) || 0;
+                    if (sBuy === 0 || cBuy === 0) return alert('請輸入有效的即期買入與現鈔買入匯率');
+                    
+                    const costPerUnit = (sBuy - cBuy) * 0.5;
+                    effectiveRate = sBuy - costPerUnit;
+                    finalTwdOffset = Math.round(parseFloat(repaymentForm.amount) * effectiveRate);
+                }
+
+                const newRepayment = {
+                    id: Date.now().toString(),
+                    ...repaymentForm,
+                    effectiveRate,
+                    amountTwd: finalTwdOffset
+                };
+
+                setRepayments(prev => [newRepayment, ...prev]);
+                setView('checkoutDetail');
+                setDetailTab('records'); // 儲存後切換到紀錄頁籤以便查看
+            };
+
+            // 切換視圖時清除狀態
             const changeView = (newView) => {
                 setView(newView);
-                setSelectedDetailUserId(null);
+                if (newView !== 'checkoutDetail' && newView !== 'addRepayment') {
+                    setSelectedDetailUserId(null);
+                }
             };
 
-            // Derived Data
+            // Derived Data for Expenses
             const currentPhaseExpenses = expenses.filter(e => e.phase === phase);
             const tripDates = useMemo(() => {
                 const tripExps = expenses.filter(e => e.phase === 'trip');
@@ -356,7 +462,9 @@
                             cash: rateForm.cash || prev[rateForm.date]?.cash || lastRate,
                             visa: rateForm.visa || prev[rateForm.date]?.visa || lastRate,
                             mastercard: rateForm.mastercard || prev[rateForm.date]?.mastercard || lastRate,
-                            jcb: rateForm.jcb || prev[rateForm.date]?.jcb || lastRate
+                            jcb: rateForm.jcb || prev[rateForm.date]?.jcb || lastRate,
+                            spotBuy: rateForm.spotBuy || prev[rateForm.date]?.spotBuy || '',
+                            cashBuy: rateForm.cashBuy || prev[rateForm.date]?.cashBuy || ''
                         }
                     }));
                     setIsRateModalOpen(false); 
@@ -368,7 +476,9 @@
                         cash: rates.cash || '',
                         visa: rates.visa || '',
                         mastercard: rates.mastercard || '',
-                        jcb: rates.jcb || ''
+                        jcb: rates.jcb || '',
+                        spotBuy: rates.spotBuy || '',
+                        cashBuy: rates.cashBuy || ''
                     });
                     setIsRateModalOpen(true); 
                 };
@@ -391,7 +501,7 @@
                             <h2 className="text-xl font-bold text-primary-900">匯率管理</h2>
                         </div>
                         <div className="mb-6 bg-primary-50 p-4 rounded-xl text-sm text-primary-600 leading-relaxed">
-                            在此設定每天的匯率，記帳時選擇日期與卡別，系統會自動帶入對應匯率。若當日某卡別未設定，將使用最近一次的匯率。
+                            在此設定每天的匯率，記帳時選擇日期與卡別，系統會自動帶入。若有設定「即期買入」與「現鈔買入」，日幣還款時會自動計算補貼匯差。
                         </div>
                         
                         <div className="space-y-2">
@@ -405,14 +515,13 @@
                                                 <th className="p-3 font-bold text-center">現金</th>
                                                 <th className="p-3 font-bold text-center">VISA</th>
                                                 <th className="p-3 font-bold text-center">Master</th>
-                                                <th className="p-3 font-bold text-center">JCB</th>
                                                 <th className="p-3 font-bold text-center">操作</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-primary-100">
                                             {Object.keys(rateConfig).length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="6" className="p-6 text-center text-primary-300 text-sm">
+                                                    <td colSpan="5" className="p-6 text-center text-primary-300 text-sm">
                                                         暫無任何匯率設定，點擊右下角新增
                                                     </td>
                                                 </tr>
@@ -425,7 +534,6 @@
                                                         <td className="p-3 text-xs font-bold text-primary-600 text-center">{rates.cash}</td>
                                                         <td className="p-3 text-xs font-bold text-primary-600 text-center">{rates.visa}</td>
                                                         <td className="p-3 text-xs font-bold text-primary-600 text-center">{rates.mastercard}</td>
-                                                        <td className="p-3 text-xs font-bold text-primary-600 text-center">{rates.jcb || '-'}</td>
                                                         <td className="p-3">
                                                             <div className="flex items-center justify-center gap-1.5">
                                                                 <button onClick={() => handleEditRate(date, rates)} className="w-7 h-7 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center hover:bg-primary-200 hover:text-primary-800 transition"><Icon name="Edit" size={12} /></button>
@@ -443,15 +551,15 @@
 
                         {/* FAB 新增按鈕 */}
                         <button onClick={() => {
-                            setRateForm({ date: new Date().toISOString().split('T')[0], cash: '', visa: '', mastercard: '', jcb: '' });
+                            setRateForm({ date: new Date().toISOString().split('T')[0], cash: '', visa: '', mastercard: '', jcb: '', spotBuy: '', cashBuy: '' });
                             setIsRateModalOpen(true);
-                        }} className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-2xl bg-primary-800 text-white flex items-center justify-center active:scale-90 transition transform hover:scale-105 z-30">
+                        }} className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-md bg-primary-800 text-white flex items-center justify-center active:scale-90 transition transform hover:scale-105 z-30">
                             <Icon name="Plus" size={28} />
                         </button>
 
                         {/* 匯率懸浮視窗 (Modal) */}
                         {isRateModalOpen && (
-                            <div className="fixed inset-0 bg-primary-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+                            <div className="fixed inset-0 bg-primary-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto pt-10 pb-10">
                                 <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
                                     <div className="px-5 py-4 border-b border-primary-100 flex justify-between items-center bg-primary-50">
                                         <h3 className="font-bold text-primary-900 flex items-center gap-2">
@@ -465,22 +573,38 @@
                                             <label className="text-xs font-bold text-primary-400 block mb-1">生效日期</label>
                                             <input type="date" value={rateForm.date} onChange={e => setRateForm({...rateForm, date: e.target.value})} disabled={!!rateConfig[rateForm.date]} className="w-full appearance-none block bg-primary-50 p-3 rounded-xl font-bold text-primary-800 outline-none border border-transparent focus:border-primary-300 transition text-[16px] disabled:opacity-60 disabled:bg-primary-100 text-center" />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="text-xs font-bold text-primary-400 block mb-1">現金</label>
-                                                <input type="number" step="0.001" value={rateForm.cash} onChange={e => setRateForm({...rateForm, cash: e.target.value})} placeholder={lastRate} className="w-full bg-primary-50 border border-transparent p-3 rounded-xl font-bold outline-none focus:border-primary-300 transition text-[16px] text-primary-800" />
+                                        <div>
+                                            <label className="text-xs font-bold text-primary-500 block mb-2 border-b border-primary-100 pb-1">刷卡/消費記帳匯率</label>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-primary-400 block mb-1">現金</label>
+                                                    <input type="number" step="0.001" value={rateForm.cash} onChange={e => setRateForm({...rateForm, cash: e.target.value})} placeholder={lastRate} className="w-full bg-primary-50 border border-transparent p-2.5 rounded-xl font-bold outline-none focus:border-primary-300 transition text-[16px] text-primary-800" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-primary-400 block mb-1">VISA</label>
+                                                    <input type="number" step="0.001" value={rateForm.visa} onChange={e => setRateForm({...rateForm, visa: e.target.value})} placeholder={lastRate} className="w-full bg-primary-50 border border-transparent p-2.5 rounded-xl font-bold outline-none focus:border-primary-300 transition text-[16px] text-primary-800" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-primary-400 block mb-1">Mastercard</label>
+                                                    <input type="number" step="0.001" value={rateForm.mastercard} onChange={e => setRateForm({...rateForm, mastercard: e.target.value})} placeholder={lastRate} className="w-full bg-primary-50 border border-transparent p-2.5 rounded-xl font-bold outline-none focus:border-primary-300 transition text-[16px] text-primary-800" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-primary-400 block mb-1">JCB</label>
+                                                    <input type="number" step="0.001" value={rateForm.jcb} onChange={e => setRateForm({...rateForm, jcb: e.target.value})} placeholder={lastRate} className="w-full bg-primary-50 border border-transparent p-2.5 rounded-xl font-bold outline-none focus:border-primary-300 transition text-[16px] text-primary-800" />
+                                                </div>
                                             </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-primary-400 block mb-1">VISA</label>
-                                                <input type="number" step="0.001" value={rateForm.visa} onChange={e => setRateForm({...rateForm, visa: e.target.value})} placeholder={lastRate} className="w-full bg-primary-50 border border-transparent p-3 rounded-xl font-bold outline-none focus:border-primary-300 transition text-[16px] text-primary-800" />
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-primary-400 block mb-1">Mastercard</label>
-                                                <input type="number" step="0.001" value={rateForm.mastercard} onChange={e => setRateForm({...rateForm, mastercard: e.target.value})} placeholder={lastRate} className="w-full bg-primary-50 border border-transparent p-3 rounded-xl font-bold outline-none focus:border-primary-300 transition text-[16px] text-primary-800" />
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-primary-400 block mb-1">JCB</label>
-                                                <input type="number" step="0.001" value={rateForm.jcb} onChange={e => setRateForm({...rateForm, jcb: e.target.value})} placeholder={lastRate} className="w-full bg-primary-50 border border-transparent p-3 rounded-xl font-bold outline-none focus:border-primary-300 transition text-[16px] text-primary-800" />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-amber-600 block mb-2 border-b border-amber-100 pb-1">日幣還款用基準匯率 (銀行買入價)</label>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-amber-500 block mb-1">即期買入 (Spot Buy)</label>
+                                                    <input type="number" step="0.0001" value={rateForm.spotBuy} onChange={e => setRateForm({...rateForm, spotBuy: e.target.value})} placeholder="例: 0.2002" className="w-full bg-amber-50 border border-transparent p-2.5 rounded-xl font-bold outline-none focus:border-amber-300 transition text-[16px] text-amber-900" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-amber-500 block mb-1">現鈔買入 (Cash Buy)</label>
+                                                    <input type="number" step="0.0001" value={rateForm.cashBuy} onChange={e => setRateForm({...rateForm, cashBuy: e.target.value})} placeholder="例: 0.1937" className="w-full bg-amber-50 border border-transparent p-2.5 rounded-xl font-bold outline-none focus:border-amber-300 transition text-[16px] text-amber-900" />
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -540,7 +664,7 @@
                         </div>
 
                         {/* FAB 新增成員按鈕 */}
-                        <button onClick={() => setIsFriendModalOpen(true)} className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-2xl bg-primary-800 text-white flex items-center justify-center active:scale-90 transition transform hover:scale-105 z-30">
+                        <button onClick={() => setIsFriendModalOpen(true)} className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-md bg-primary-800 text-white flex items-center justify-center active:scale-90 transition transform hover:scale-105 z-30">
                             <Icon name="Plus" size={28} />
                         </button>
 
@@ -722,13 +846,149 @@
                                     </span>
                                 )}
                             </div>
-                            <button onClick={handleSaveExpense} className="w-full bg-primary-800 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-primary-200 active:scale-[0.98] transition hover:bg-primary-900">確認記帳</button>
+                            <button onClick={handleSaveExpense} className="w-full bg-primary-800 text-white py-3.5 rounded-xl font-bold shadow-md active:scale-[0.98] transition hover:bg-primary-900">確認記帳</button>
                         </div>
                     </div>
                 );
             }
 
-            // --- View: Summary (Checkout / Settlement) ---
+            // --- View: Add Repayment (新增還款紀錄) ---
+            if (view === 'addRepayment') {
+                const isJPY = repaymentForm.currency === 'JPY';
+                
+                let offsetTwd = 0;
+                let effectiveRateStr = '-';
+                if (isJPY) {
+                    const s = parseFloat(repaymentForm.spotBuy) || 0;
+                    const c = parseFloat(repaymentForm.cashBuy) || 0;
+                    if (s > 0 && c > 0) {
+                        const cost = (s - c) * 0.5;
+                        const eff = s - cost;
+                        effectiveRateStr = eff.toFixed(4);
+                        offsetTwd = Math.round((parseFloat(repaymentForm.amount) || 0) * eff);
+                    }
+                } else {
+                    offsetTwd = parseInt(repaymentForm.amount) || 0;
+                }
+
+                return (
+                    <div className="max-w-2xl mx-auto min-h-screen bg-white flex flex-col animate-fade-in">
+                        <div className="p-4 border-b border-primary-100 flex items-center gap-3 sticky top-0 bg-white/95 backdrop-blur z-20">
+                            <button onClick={() => changeView('checkoutDetail')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50"><Icon name="ArrowLeft"/></button>
+                            <h2 className="text-lg font-bold text-primary-900">新增收支紀錄</h2>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-32">
+                            <div><label className="text-xs font-bold text-primary-400 block mb-1">記錄日期</label><input type="date" value={repaymentForm.date} onChange={e => setRepaymentForm({...repaymentForm, date: e.target.value})} className="w-full appearance-none block bg-primary-50 p-3 rounded-xl font-bold text-primary-800 outline-none text-[16px] text-center" /></div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-primary-400 block mb-1">還款人 (付款方)</label>
+                                    <div className="relative">
+                                        <select value={repaymentForm.payerId} onChange={e => setRepaymentForm({...repaymentForm, payerId: e.target.value})} className="w-full appearance-none bg-primary-50 p-3 rounded-xl font-bold text-rose-600 outline-none focus:ring-2 focus:ring-primary-400 transition text-[16px]">
+                                            <option value="" disabled>選擇成員</option>
+                                            <option value="me">{myName}</option>
+                                            {friends.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                        </select>
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none"><Icon name="ChevronDown" size={14} /></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-primary-400 block mb-1">收款人 (收款方)</label>
+                                    <div className="relative">
+                                        <select value={repaymentForm.payeeId} onChange={e => setRepaymentForm({...repaymentForm, payeeId: e.target.value})} className="w-full appearance-none bg-primary-50 p-3 rounded-xl font-bold text-emerald-600 outline-none focus:ring-2 focus:ring-primary-400 transition text-[16px]">
+                                            <option value="" disabled>選擇成員</option>
+                                            <option value="me">{myName}</option>
+                                            {friends.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                        </select>
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none"><Icon name="ChevronDown" size={14} /></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr className="border-primary-100" />
+
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-end">
+                                    <label className="text-xs font-bold text-primary-400">金額 & 幣別</label>
+                                    <div className="flex bg-primary-100 rounded-lg p-1">
+                                        {['TWD', 'JPY'].map(c => (
+                                            <button key={c} onClick={() => setRepaymentForm({...repaymentForm, currency: c})} className={`px-3 py-1 rounded-md text-xs font-bold transition ${repaymentForm.currency === c ? 'bg-white shadow text-primary-800' : 'text-primary-400'}`}>{c}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="relative input-focus bg-primary-50 rounded-2xl border border-transparent">
+                                    <input type="number" inputMode="decimal" value={repaymentForm.amount} onChange={e => setRepaymentForm({...repaymentForm, amount: e.target.value})} className="w-full bg-transparent p-4 text-4xl font-black text-primary-800 outline-none placeholder-primary-200" placeholder="0" />
+                                </div>
+                            </div>
+
+                            {/* 日幣專屬：基準日選擇與匯差計算 */}
+                            {isJPY && (
+                                <div className="bg-amber-50 rounded-2xl p-5 border border-amber-100 space-y-4 animate-fade-in">
+                                    <div className="flex items-center gap-2 mb-2 text-amber-700 font-bold text-sm">
+                                        <Icon name="RightLeft" size={16} /> 收取日幣現鈔換算
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="text-[10px] font-bold text-amber-600 block mb-1 uppercase tracking-wider">選擇對應消費日 (抓取匯率)</label>
+                                        <div className="relative">
+                                            <select value={repaymentForm.refDate} onChange={e => setRepaymentForm({...repaymentForm, refDate: e.target.value})} className="w-full appearance-none bg-white p-3 rounded-xl font-bold text-amber-900 outline-none border border-amber-200 focus:border-amber-400 transition text-[16px]">
+                                                <option value="" disabled>請選擇消費日</option>
+                                                {tripDates.map(date => (<option key={date} value={date}>{date.replace(/-/g, '/')}</option>))}
+                                            </select>
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-500 pointer-events-none"><Icon name="ChevronDown" size={14} /></div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-amber-600 block mb-1">即期買入</label>
+                                            <input type="number" step="0.0001" value={repaymentForm.spotBuy} onChange={e => setRepaymentForm({...repaymentForm, spotBuy: e.target.value})} placeholder="0.2002" className="w-full bg-white border border-amber-200 p-2.5 rounded-xl font-bold outline-none focus:border-amber-400 transition text-[16px] text-amber-900" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-amber-600 block mb-1">現鈔買入</label>
+                                            <input type="number" step="0.0001" value={repaymentForm.cashBuy} onChange={e => setRepaymentForm({...repaymentForm, cashBuy: e.target.value})} placeholder="0.1937" className="w-full bg-white border border-amber-200 p-2.5 rounded-xl font-bold outline-none focus:border-amber-400 transition text-[16px] text-amber-900" />
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="bg-white/60 p-3 rounded-xl border border-amber-200/50 mt-2 text-[11px] leading-relaxed font-medium text-amber-800">
+                                        <div className="flex justify-between mb-1">
+                                            <span>有效匯率推算</span>
+                                            <span className="font-bold">{effectiveRateStr}</span>
+                                        </div>
+                                        <div className="text-amber-600/80 mb-2 border-b border-amber-200/50 pb-2">公式: 即期 - ((即期 - 現鈔) ÷ 2)</div>
+                                        <div className="flex justify-between items-center pt-1">
+                                            <span className="font-bold">可折抵台幣總額</span>
+                                            <span className="text-lg font-black text-amber-600">{formatMoney(offsetTwd)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="text-xs font-bold text-primary-400 block mb-1">備註 (選填)</label>
+                                <textarea 
+                                    value={repaymentForm.note} 
+                                    onChange={e => setRepaymentForm({...repaymentForm, note: e.target.value})} 
+                                    className="w-full bg-primary-50 p-3 rounded-xl font-bold text-primary-800 outline-none focus:ring-2 focus:ring-primary-400 text-[16px] resize-none leading-relaxed" 
+                                    placeholder="例：午餐代墊還款..."
+                                    rows="2"
+                                ></textarea>
+                            </div>
+                        </div>
+
+                        <div className="p-4 border-t border-primary-100 bg-white sticky bottom-0 safe-bottom">
+                            {isJPY && (
+                                <div className="text-center text-xs font-bold text-primary-400 mb-3">
+                                    這筆款項將為收款人折抵 <span className="text-primary-800 text-base mx-1">{formatMoney(offsetTwd)}</span> TWD 的欠款
+                                </div>
+                            )}
+                            <button onClick={handleSaveRepayment} className="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold shadow-md active:scale-[0.98] transition hover:bg-emerald-700">儲存紀錄</button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // --- View: Summary (結算清單 - 每日/階段) ---
             if (view === 'summary') {
                 return (
                     <div className="max-w-3xl mx-auto min-h-screen bg-white flex flex-col animate-fade-in relative pb-24">
@@ -738,6 +998,10 @@
                                     <button onClick={() => changeView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50 transition active:scale-95"><Icon name="ArrowLeft" size={20}/></button>
                                     <h2 className="text-2xl font-black text-primary-900 tracking-tight">結算清單</h2>
                                 </div>
+                                <button onClick={() => changeView('checkoutList')} className="flex items-center gap-1.5 bg-primary-100 text-primary-700 px-3 py-1.5 rounded-full font-bold text-sm hover:bg-primary-200 transition active:scale-95 shadow-sm">
+                                    <Icon name="Wallet" size={14} />
+                                    收付款紀錄
+                                </button>
                             </div>
                             <div className="flex px-5 pb-4 gap-4 mt-2">
                                 <button onClick={() => { setPhase('pre'); setSelectedDetailUserId(null); }} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${phase === 'pre' ? 'bg-amber-100 text-amber-900 shadow-inner' : 'bg-primary-50 text-primary-400 hover:bg-primary-100'}`}><Icon name="Calendar" size={16}/> 出發前</button>
@@ -908,7 +1172,7 @@
                                             })}
                                         </div>
 
-                                        {/* 個人明細 Modal */}
+                                        {/* 個人單日/行前 明細 Modal */}
                                         {selectedDetailUserId && (() => {
                                             const dUser = balances.find(u => u.id === selectedDetailUserId);
                                             if (!dUser) return null;
@@ -989,6 +1253,271 @@
                                 );
                             })()}
                         </div>
+                    </div>
+                );
+            }
+
+            // --- View: Checkout List (收付款總紀錄) ---
+            if (view === 'checkoutList') {
+                // 計算每個人的全局餘額 (Global Balance)
+                const users = { 'me': { id: 'me', name: myName }, ...friends.reduce((acc, f) => ({...acc, [f.id]: f}), {}) };
+                Object.keys(users).forEach(id => {
+                    users[id].totalExpenseDebt = 0; // 應付給別人的總額
+                    users[id].totalPaid = 0;        // 代墊的總額
+                    users[id].repaidOut = 0;        // 已還款給別人的總額
+                    users[id].repaidIn = 0;         // 已收到別人還款的總額
+                });
+
+                expenses.forEach(exp => {
+                    const finalTotal = exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD;
+                    if (users[exp.paidBy]) users[exp.paidBy].totalPaid += finalTotal;
+                    exp.payerIds.forEach(pid => {
+                        if (users[pid]) users[pid].totalExpenseDebt += calculateFriendShare(exp, pid);
+                    });
+                });
+
+                repayments.forEach(rep => {
+                    if (users[rep.payerId]) users[rep.payerId].repaidOut += rep.amountTwd;
+                    if (users[rep.payeeId]) users[rep.payeeId].repaidIn += rep.amountTwd;
+                });
+
+                const globalBalances = Object.values(users).map(u => {
+                    // net > 0 代表該成員「欠款」，net < 0 代表該成員「被欠款 (待收)」
+                    const globalNet = u.totalExpenseDebt - u.totalPaid - u.repaidOut + u.repaidIn;
+                    return { ...u, globalNet };
+                });
+
+                // 讓「我」排第一
+                const displayGlobal = [
+                    globalBalances.find(b => b.id === 'me'),
+                    ...globalBalances.filter(b => b.id !== 'me')
+                ];
+
+                return (
+                    <div className="max-w-3xl mx-auto min-h-screen bg-white flex flex-col animate-fade-in relative pb-24">
+                        <div className="bg-white sticky top-0 z-20 shadow-sm border-b border-primary-100">
+                            <div className="px-5 py-5 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <button onClick={() => changeView('summary')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50 transition active:scale-95"><Icon name="ArrowLeft" size={20}/></button>
+                                    <h2 className="text-xl font-black text-primary-900">總收支名單</h2>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-5">
+                            <div className="space-y-3">
+                                {displayGlobal.map(b => (
+                                    <div 
+                                        key={b.id} 
+                                        className="bg-white border border-primary-100 rounded-2xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:border-primary-300 transition-all active:scale-[0.98]"
+                                        onClick={() => { setSelectedDetailUserId(b.id); changeView('checkoutDetail'); }}
+                                    >
+                                        <div className="flex items-center gap-4 min-w-0 pr-2">
+                                            <div className="w-12 h-12 rounded-full bg-primary-50 text-primary-700 font-bold flex items-center justify-center text-lg flex-shrink-0 border border-primary-100">
+                                                {b.id === 'me' ? (myName || '我')[0] : b.name[0]}
+                                            </div>
+                                            <div className="truncate">
+                                                <span className="font-bold text-primary-900 text-[16px]">{b.id === 'me' ? myName : b.name}</span>
+                                                <div className="text-[11px] text-primary-400 mt-0.5">點擊查看收支與還款紀錄</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-right flex-shrink-0">
+                                            {b.globalNet > 0 ? (
+                                                <div>
+                                                    <div className="text-[10px] font-bold text-rose-500 mb-0.5">待付 (欠款)</div>
+                                                    <div className="font-black text-rose-600 text-xl">{formatMoney(b.globalNet)}</div>
+                                                </div>
+                                            ) : b.globalNet < 0 ? (
+                                                <div>
+                                                    <div className="text-[10px] font-bold text-emerald-500 mb-0.5">待收 (代墊)</div>
+                                                    <div className="font-black text-emerald-600 text-xl">{formatMoney(Math.abs(b.globalNet))}</div>
+                                                </div>
+                                            ) : (
+                                                <div className="font-bold text-primary-400 bg-primary-50 px-3 py-1.5 rounded-xl text-sm border border-primary-100">已結清</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // --- View: Checkout Detail (個人詳細結帳頁 - 重新設計的簡約排版 + Tabs) ---
+            if (view === 'checkoutDetail') {
+                if (!selectedDetailUserId) { setView('checkoutList'); return null; }
+
+                // 計算個人明細
+                const userId = selectedDetailUserId;
+                const userObj = userId === 'me' ? { id: 'me', name: myName } : friends.find(f => f.id === userId);
+                if (!userObj) { setView('checkoutList'); return null; }
+
+                const userRepayments = repayments.filter(r => r.payerId === userId || r.payeeId === userId);
+                
+                let totalExpenseDebt = 0;
+                let totalPaid = 0;
+                let repaidOut = 0;
+                let repaidIn = 0;
+                let dailyNet = { pre: 0 };
+                tripDates.forEach(d => dailyNet[d] = 0);
+
+                expenses.forEach(exp => {
+                    const phaseKey = exp.phase === 'pre' ? 'pre' : exp.date;
+                    const finalTotal = exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD;
+
+                    if (exp.paidBy === userId) {
+                        totalPaid += finalTotal;
+                        dailyNet[phaseKey] -= finalTotal; 
+                    }
+                    if (exp.payerIds.includes(userId)) {
+                        const share = calculateFriendShare(exp, userId);
+                        totalExpenseDebt += share;
+                        dailyNet[phaseKey] += share;
+                    }
+                });
+
+                userRepayments.forEach(rep => {
+                    if (rep.payerId === userId) repaidOut += rep.amountTwd;
+                    if (rep.payeeId === userId) repaidIn += rep.amountTwd;
+                });
+
+                const globalNet = totalExpenseDebt - totalPaid - repaidOut + repaidIn;
+
+                return (
+                    <div className="max-w-3xl mx-auto min-h-screen bg-primary-50 flex flex-col animate-fade-in relative pb-28">
+                        <div className="bg-primary-50 sticky top-0 z-20">
+                            <div className="px-5 py-5 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <button onClick={() => changeView('checkoutList')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-100 transition active:scale-95"><Icon name="ArrowLeft" size={20}/></button>
+                                    <h2 className="text-xl font-black text-primary-900">{userObj.name} 的收支紀錄</h2>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="px-5 pb-5 space-y-6">
+                            {/* 總結大卡片 - 簡約現代白底設計 */}
+                            <div className="bg-white rounded-3xl p-6 shadow-sm border border-primary-100 relative overflow-hidden">
+                                <div className="flex justify-between items-center mb-3">
+                                    <div className="text-primary-400 text-xs font-bold uppercase tracking-widest">最終結算淨值</div>
+                                    <div className={`text-xs font-bold px-3 py-1 rounded-full ${globalNet > 0 ? 'bg-rose-50 text-rose-600' : globalNet < 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-primary-50 text-primary-500'}`}>
+                                        {globalNet > 0 ? '待付款 (欠款)' : globalNet < 0 ? '待收回 (代墊)' : '已完全結清'}
+                                    </div>
+                                </div>
+                                <div className="flex items-baseline">
+                                    <div className={`text-5xl font-black tracking-tight ${globalNet > 0 ? 'text-rose-600' : globalNet < 0 ? 'text-emerald-600' : 'text-primary-800'}`}>
+                                        {globalNet > 0 ? formatMoney(globalNet) : globalNet < 0 ? formatMoney(Math.abs(globalNet)) : '0'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Tabs 頁籤切換 */}
+                            <div className="flex bg-white/50 p-1.5 rounded-2xl border border-primary-100 shadow-sm backdrop-blur-sm">
+                                <button onClick={() => setDetailTab('bills')} className={`flex-1 py-3 rounded-xl text-[15px] font-bold transition-all duration-200 ${detailTab === 'bills' ? 'bg-white text-primary-800 shadow shadow-primary-200/50 scale-[1.02]' : 'text-primary-400 hover:text-primary-600'}`}>
+                                    帳單明細
+                                </button>
+                                <button onClick={() => setDetailTab('records')} className={`flex-1 py-3 rounded-xl text-[15px] font-bold transition-all duration-200 ${detailTab === 'records' ? 'bg-white text-primary-800 shadow shadow-primary-200/50 scale-[1.02]' : 'text-primary-400 hover:text-primary-600'}`}>
+                                    收付款紀錄
+                                </button>
+                            </div>
+
+                            {/* Tab Content: 帳單明細 */}
+                            {detailTab === 'bills' && (
+                                <div className="animate-fade-in">
+                                    <div className="bg-white rounded-3xl p-3 shadow-sm border border-primary-100">
+                                        {Object.entries(dailyNet).map(([key, net]) => {
+                                            if (net === 0) return null;
+                                            const isPre = key === 'pre';
+                                            const label = isPre ? '行前款項' : key.replace(/-/g, '/');
+                                            return (
+                                                <div key={key} className="flex justify-between items-center p-4 hover:bg-primary-50 rounded-2xl transition">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 shadow-inner ${isPre ? 'bg-amber-50 text-amber-600' : 'bg-primary-50 text-primary-600'}`}>
+                                                            <Icon name={isPre ? 'Calendar' : 'MapPlane'} size={16} />
+                                                        </div>
+                                                        <span className="font-bold text-primary-900 text-[16px]">{label}</span>
+                                                    </div>
+                                                    <div className={`text-right font-black text-lg ${net > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                        {net > 0 ? `應付 +${formatMoney(net)}` : `代墊 ${formatMoney(Math.abs(net))}`}
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                        {Object.values(dailyNet).every(n => n === 0) && (
+                                            <div className="p-10 text-center">
+                                                <div className="w-16 h-16 bg-primary-50 text-primary-200 rounded-full flex items-center justify-center mx-auto mb-3"><Icon name="Utensils" size={24} /></div>
+                                                <p className="text-primary-400 font-bold text-sm">無費用產生</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Tab Content: 收付款紀錄 */}
+                            {detailTab === 'records' && (
+                                <div className="animate-fade-in">
+                                    {userRepayments.length === 0 ? (
+                                        <div className="bg-white rounded-3xl border border-primary-100 border-dashed p-10 text-center shadow-sm">
+                                            <div className="w-16 h-16 bg-primary-50 text-primary-300 rounded-full flex items-center justify-center mx-auto mb-4"><Icon name="RightLeft" size={24} /></div>
+                                            <p className="text-primary-500 font-bold text-sm">無收付款紀錄</p>
+                                            <p className="text-primary-300 text-xs mt-1.5">點擊右下角按鈕新增紀錄</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {userRepayments.sort((a,b) => new Date(b.id) - new Date(a.id)).map(rep => {
+                                                const isPayer = rep.payerId === userId;
+                                                const otherId = isPayer ? rep.payeeId : rep.payerId;
+                                                const otherName = otherId === 'me' ? myName : (friends.find(f => f.id === otherId)?.name || '未知');
+                                                
+                                                return (
+                                                    <div key={rep.id} className="bg-white border border-primary-100 rounded-3xl p-5 shadow-sm flex items-start gap-4">
+                                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 shadow-inner mt-1 ${isPayer ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                            <Icon name={isPayer ? 'ArrowRight' : 'ArrowLeft'} size={20} />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex justify-between items-start mb-1">
+                                                                <span className="font-bold text-primary-900 text-[16px] truncate leading-tight mt-0.5">
+                                                                    {isPayer ? `支付給 ${otherName}` : `收到來自 ${otherName}`}
+                                                                </span>
+                                                                <div className={`font-black whitespace-nowrap ml-2 text-xl leading-none ${isPayer ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                                    {isPayer ? '-' : '+'}{formatMoney(rep.amountTwd)}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-xs text-primary-400 flex justify-between items-center mb-1.5">
+                                                                <div className="flex items-center gap-1.5 mt-1">
+                                                                    <span>{rep.date.replace(/-/g, '/')}</span>
+                                                                    {rep.currency === 'JPY' && <span className="bg-primary-50 px-2 py-0.5 rounded-md text-[10px] font-bold text-primary-500 border border-primary-100 shadow-sm">¥{parseFloat(rep.amount).toLocaleString()}</span>}
+                                                                </div>
+                                                                <button onClick={() => handleDeleteRepayment(rep.id)} className="text-primary-300 hover:text-rose-500 transition py-1 px-2 -mr-2 rounded flex items-center gap-1 bg-white">
+                                                                    <Icon name="Trash2" size={12} /> 刪除
+                                                                </button>
+                                                            </div>
+                                                            {rep.note && <div className="text-[12px] text-primary-600 mt-2 bg-primary-50/50 p-2.5 rounded-xl truncate border border-primary-50">{rep.note}</div>}
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* FAB 新增還款按鈕 (永遠顯示在結帳明細頁的右下角) */}
+                        <button onClick={() => {
+                            // 自動決定誰付給誰 (欠錢的人是 Payer)
+                            const defaultPayer = globalNet > 0 ? userId : 'me';
+                            const defaultPayee = globalNet > 0 ? 'me' : userId;
+                            
+                            setRepaymentForm({
+                                payerId: defaultPayer, payeeId: defaultPayee, amount: '', currency: 'TWD', 
+                                date: new Date().toISOString().split('T')[0], refDate: tripDates[tripDates.length - 1] || '', 
+                                spotBuy: '', cashBuy: '', note: ''
+                            });
+                            changeView('addRepayment');
+                        }} className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-md bg-emerald-600 text-white flex items-center justify-center active:scale-90 transition transform hover:scale-105 z-30">
+                            <Icon name="Plus" size={28} />
+                        </button>
                     </div>
                 );
             }
@@ -1111,7 +1640,7 @@
                             )}
                         </div>
                     </div>
-                    <button onClick={() => { setEditingId(null); setForm(prev => ({...prev, title: '', amount: '', payerIds: [], paidBy: 'me', splitMode: 'equal', exactAmounts: {}, note: ''})); changeView('addExpense'); }} className={`fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-2xl text-white flex items-center justify-center active:scale-[0.85] transition-transform transform hover:scale-105 z-30 ${phase === 'pre' ? 'bg-amber-600 shadow-amber-200' : 'bg-primary-800 shadow-primary-300'}`}><Icon name="Plus" size={28} /></button>
+                    <button onClick={() => { setEditingId(null); setForm(prev => ({...prev, title: '', amount: '', payerIds: [], paidBy: 'me', splitMode: 'equal', exactAmounts: {}, note: ''})); changeView('addExpense'); }} className={`fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-md text-white flex items-center justify-center active:scale-[0.85] transition-transform transform hover:scale-105 z-30 ${phase === 'pre' ? 'bg-amber-600' : 'bg-primary-800'}`}><Icon name="Plus" size={28} /></button>
                 </div>
             );
         };
