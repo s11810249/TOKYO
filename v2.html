@@ -263,7 +263,6 @@
             const [selectedDetailUserId, setSelectedDetailUserId] = useState(null);
             // 結帳明細 Tabs: 'pre' | 'trip' | 'records'
             const [detailTab, setDetailTab] = useState('pre');
-            const [detailSelectedPreDate, setDetailSelectedPreDate] = useState('');
             const [detailSelectedTripDate, setDetailSelectedTripDate] = useState('');
 
             // Data State
@@ -294,7 +293,7 @@
             const [newFriendName, setNewFriendName] = useState('');
             const [isFriendModalOpen, setIsFriendModalOpen] = useState(false);
             
-            // Repayment Form State
+            // Repayment Form State (新增 twdAmount 處理雙向綁定)
             const [repaymentForm, setRepaymentForm] = useState({
                 payerId: '', payeeId: 'me', amount: '', currency: 'TWD', 
                 date: new Date().toISOString().split('T')[0], refDate: '', spotBuy: '', cashBuy: '', note: '', twdAmount: '',
@@ -333,6 +332,32 @@
                     setForm(prev => ({ ...prev, rate: suggestedRate }));
                 }
             }, [form.date, form.paymentMethod, form.currency, getRateForConfig, editingId]);
+
+            // --- 確保 useEffect 位於最外層 ---
+            useEffect(() => {
+                if (repaymentForm.currency === 'JPY' && repaymentForm.refDate) {
+                    const sBuy = rateConfig[repaymentForm.refDate]?.spotBuy || '';
+                    const cBuy = rateConfig[repaymentForm.refDate]?.cashBuy || '';
+                    
+                    setRepaymentForm(prev => {
+                        let newTwd = prev.twdAmount;
+                        let newJpy = prev.amount;
+                        const parsedS = parseFloat(sBuy) || 0;
+                        const parsedC = parseFloat(cBuy) || 0;
+                        
+                        if (parsedS > 0 && parsedC > 0) {
+                             const eff = parsedS - (parsedS - parsedC) * 0.5;
+                             // 若有日幣，優先用日幣推台幣；若無日幣但有台幣，用台幣推日幣
+                             if (prev.twdAmount && !prev.amount) {
+                                 newJpy = Math.ceil(parseFloat(prev.twdAmount) / eff).toString();
+                             } else if (prev.amount) {
+                                 newTwd = Math.round(parseFloat(prev.amount) * eff).toString();
+                             }
+                        }
+                        return { ...prev, spotBuy: sBuy, cashBuy: cBuy, twdAmount: newTwd, amount: newJpy };
+                    });
+                }
+            }, [repaymentForm.refDate, repaymentForm.currency, rateConfig]); 
 
             // Handlers
             const handleEdit = useCallback((exp) => {
@@ -438,11 +463,6 @@
 
             // Derived Data for Expenses
             const currentPhaseExpenses = expenses.filter(e => e.phase === phase);
-            const preDates = useMemo(() => {
-                const preExps = expenses.filter(e => e.phase === 'pre');
-                const dates = [...new Set(preExps.map(e => e.date))];
-                return dates.sort((a, b) => new Date(b) - new Date(a));
-            }, [expenses]);
             const tripDates = useMemo(() => {
                 const tripExps = expenses.filter(e => e.phase === 'trip');
                 const dates = [...new Set(tripExps.map(e => e.date))];
@@ -457,13 +477,10 @@
 
             // CheckOut Detail 內的 Date Selector 初始化
             useEffect(() => {
-                if (detailTab === 'pre' && preDates.length > 0 && !preDates.includes(detailSelectedPreDate)) {
-                    setDetailSelectedPreDate(preDates[0]);
-                }
                 if (detailTab === 'trip' && tripDates.length > 0 && !tripDates.includes(detailSelectedTripDate)) {
                     setDetailSelectedTripDate(tripDates[0]);
                 }
-            }, [detailTab, preDates, tripDates, detailSelectedPreDate, detailSelectedTripDate]);
+            }, [detailTab, tripDates, detailSelectedTripDate]);
 
             const selectedDateExpenses = useMemo(() => {
                 if (phase !== 'trip' || !selectedDate) return [];
@@ -788,7 +805,31 @@
                                     </div>
                                 </div>
 
-                                {isJPY && (<div className="animate-fade-in"><div className="flex items-center gap-3 bg-white border border-primary-200 rounded-xl p-3 shadow-sm input-focus"><div className="w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center text-primary-500 flex-shrink-0"><Icon name="Yen" size={14}/></div><div className="flex-1"><div className="flex justify-between"><label className="block text-[10px] font-bold text-primary-400 uppercase">匯率 (JPY → TWD)</label><span className="text-[10px] text-primary-300">{rateConfig[form.date]?.[form.paymentMethod] ? '(已自動帶入設定值)' : '(使用預設)'}</span></div><input type="number" step="0.001" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})} className="w-full font-bold text-primary-800 outline-none bg-transparent text-[16px]" placeholder="0.22" /></div><div className="text-xs font-bold text-primary-300">≈ {calculateBaseTWD(form.amount, 'JPY', form.rate)} TWD</div></div></div>)}
+                                {isJPY && (
+                                    <div className="animate-fade-in">
+                                        <div className="flex items-center gap-3 bg-white border border-primary-200 rounded-xl p-3 shadow-sm input-focus">
+                                            <div className="w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center text-primary-500 flex-shrink-0">
+                                                <Icon name="Yen" size={14}/>
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="flex justify-between">
+                                                    <label className="block text-[10px] font-bold text-primary-400 uppercase">匯率 (JPY → TWD)</label>
+                                                    <span className="text-[10px] text-primary-300">
+                                                        { (() => {
+                                                            let tDate = form.date;
+                                                            if (form.paymentMethod !== 'cash' && cardRateRules[form.paymentMethod]) {
+                                                                tDate = getOffsetDateString(form.date, cardRateRules[form.paymentMethod]);
+                                                            }
+                                                            return (rateConfig[tDate] && rateConfig[tDate][form.paymentMethod]) ? `(已帶入 ${tDate.slice(5).replace('-','/')} 設定)` : '(使用預設)';
+                                                        })() }
+                                                    </span>
+                                                </div>
+                                                <input type="number" step="0.001" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})} className="w-full font-bold text-primary-800 outline-none bg-transparent text-[16px]" placeholder="0.22" />
+                                            </div>
+                                            <div className="text-xs font-bold text-primary-300">≈ {calculateBaseTWD(form.amount, 'JPY', form.rate)} TWD</div>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="flex flex-col gap-2 px-1"><label className="flex items-center gap-2 text-sm font-bold text-primary-500 cursor-pointer select-none"><input type="checkbox" checked={form.hasFee} onChange={e => setForm({...form, hasFee: e.target.checked})} className="accent-primary-600 w-4 h-4 flex-shrink-0" /> 信用卡海外交易手續費 (+1.5%)</label><div className="text-right mt-1 p-3 bg-primary-50 rounded-xl"><span className="text-xs font-bold text-primary-400 block">台幣總計 (含手續費)</span><span className="text-2xl font-black text-primary-800">{formatMoney(finalTotal)}</span></div></div>
                             </div>
                             
@@ -1090,6 +1131,271 @@
                 );
             }
 
+            // --- View: Summary (結算清單 - 每日/階段) ---
+            if (view === 'summary') {
+                return (
+                    <div className="max-w-3xl mx-auto min-h-screen bg-white flex flex-col animate-fade-in relative pb-24">
+                        <div className="bg-white sticky top-0 z-20 shadow-sm border-b border-primary-100">
+                            <div className="px-5 pt-6 pb-2 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <button onClick={() => changeView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50 transition active:scale-95"><Icon name="ArrowLeft" size={20}/></button>
+                                    <h2 className="text-2xl font-black text-primary-900 tracking-tight">結算清單</h2>
+                                </div>
+                            </div>
+                            <div className="flex px-5 pb-4 gap-4 mt-2">
+                                <button onClick={() => { setPhase('pre'); setSelectedDetailUserId(null); }} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${phase === 'pre' ? 'bg-amber-100 text-amber-900 shadow-inner' : 'bg-primary-50 text-primary-400 hover:bg-primary-100'}`}><Icon name="Calendar" size={16}/> 出發前</button>
+                                <button onClick={() => { setPhase('trip'); setSelectedDetailUserId(null); }} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${phase === 'trip' ? 'bg-emerald-100 text-emerald-900 shadow-inner' : 'bg-primary-50 text-primary-400 hover:bg-primary-100'}`}><Icon name="MapPlane" size={16}/> 旅程中</button>
+                            </div>
+                        </div>
+
+                        <div className="p-4 space-y-4">
+                            {(() => {
+                                // 檢查是否無旅程消費日期
+                                if (phase === 'trip' && (!selectedDate || tripDates.length === 0)) {
+                                    return (
+                                        <div className="text-center py-12 animate-fade-in">
+                                            <div className="bg-white p-6 rounded-full inline-block shadow-sm mb-4"><Icon name="MapPlane" size={32} className="text-primary-200" /></div>
+                                            <p className="text-primary-400 font-bold">無旅程中消費紀錄</p>
+                                        </div>
+                                    );
+                                }
+
+                                // 初始化所有成員數據
+                                const users = { 'me': { id: 'me', name: myName, paid: 0, shouldPay: 0 } };
+                                friends.forEach(f => users[f.id] = { id: f.id, name: f.name, paid: 0, shouldPay: 0 });
+
+                                // 過濾當前階段/日期的帳目
+                                const currentExpenses = phase === 'pre' 
+                                    ? expenses.filter(e => e.phase === 'pre') 
+                                    : expenses.filter(e => e.phase === 'trip' && e.date === selectedDate);
+
+                                // 若該階段/該日沒有任何帳目
+                                if (currentExpenses.length === 0) {
+                                    return (
+                                        <div className="text-center py-12 animate-fade-in">
+                                            <div className="bg-white p-6 rounded-full inline-block shadow-sm mb-4"><Icon name="Check" size={32} className="text-primary-200" /></div>
+                                            <p className="text-primary-400 font-bold">目前無帳目需要結算</p>
+                                        </div>
+                                    );
+                                }
+
+                                // 計算這個畫面的「總花費」
+                                const totalPhaseExpense = currentExpenses.reduce((sum, exp) => sum + (exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD), 0);
+
+                                // 累加代墊總額與應分攤總額
+                                currentExpenses.forEach(exp => {
+                                    const finalTotal = exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD;
+                                    if (users[exp.paidBy]) users[exp.paidBy].paid += finalTotal;
+                                    exp.payerIds.forEach(pid => {
+                                        if (users[pid]) users[pid].shouldPay += calculateFriendShare(exp, pid);
+                                    });
+                                });
+
+                                // 計算每個人最後的 Net (正數代表需付錢，負數代表可拿回錢)
+                                const balances = Object.values(users).map(u => ({
+                                    ...u,
+                                    net: u.shouldPay - u.paid
+                                }));
+
+                                // 決定結算中心
+                                let center;
+                                if (phase === 'pre') {
+                                    center = balances.find(b => b.id === 'me');
+                                } else {
+                                    center = balances.reduce((max, u) => u.paid > max.paid ? u : max, balances[0]);
+                                }
+
+                                const others = balances.filter(b => b.id !== center.id);
+                                
+                                // 修復結算加總誤差：強制結算中心的數字為其他人淨值的完美反向平衡
+                                const othersNetSum = others.reduce((sum, b) => sum + b.net, 0);
+                                center.net = -othersNetSum;
+                                center.shouldPay = center.paid + center.net;
+
+                                // 讓「我」排在第一個，後續依序排列其他人
+                                const displayBalances = [
+                                    balances.find(b => b.id === 'me'),
+                                    ...balances.filter(b => b.id !== 'me')
+                                ];
+
+                                return (
+                                    <div className="animate-fade-in">
+                                        {/* 結算總額區塊 (採用與 Dashboard 相同的緊湊版型) */}
+                                        {phase === 'trip' ? (
+                                            <div className="bg-white p-3 rounded-2xl border border-primary-100 shadow-sm mb-4 flex justify-between items-center gap-3">
+                                                <div className="relative w-[150px] flex-shrink-0">
+                                                    <select value={selectedDate} onChange={(e) => { setSelectedDate(e.target.value); setSelectedDetailUserId(null); }} className="w-full appearance-none bg-primary-50 py-2.5 pl-3 pr-8 rounded-xl font-bold text-primary-800 outline-none border border-transparent focus:border-primary-300 transition text-[16px] text-center">
+                                                        {tripDates.map(date => (<option key={date} value={date}>{date.replace(/-/g, '/')}</option>))}
+                                                    </select>
+                                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-500 pointer-events-none"><Icon name="ChevronDown" size={14} /></div>
+                                                </div>
+                                                <div className="flex-1 text-right pr-1">
+                                                    <div className="text-[10px] font-bold text-primary-400 mb-0.5">本日花費總額</div>
+                                                    <div className="text-xl font-black text-primary-800 leading-none truncate">{formatMoney(totalPhaseExpense)}</div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-white p-3 rounded-2xl border border-primary-100 shadow-sm mb-4 flex justify-between items-center gap-3">
+                                                <div className="flex items-center gap-3 pl-3 py-1 flex-shrink-0">
+                                                    <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                                                        <Icon name="Calendar" size={20} />
+                                                    </div>
+                                                    <span className="font-bold text-primary-800 text-[16px]">出發前</span>
+                                                </div>
+                                                <div className="flex-1 text-right pr-1">
+                                                    <div className="text-[10px] font-bold text-primary-400 mb-0.5">行前花費總額</div>
+                                                    <div className="text-xl font-black text-primary-800 leading-none truncate">{formatMoney(totalPhaseExpense)}</div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <h3 className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-3 pl-1">結算明細</h3>
+                                        <div className="space-y-3">
+                                            {displayBalances.map(b => {
+                                                const isCenter = b.id === center.id;
+                                                let statusLabel, statusAmount, statusColor;
+
+                                                if (isCenter) {
+                                                    if (b.net < 0) {
+                                                        statusLabel = '總應收回';
+                                                        statusAmount = formatMoney(Math.abs(b.net));
+                                                        statusColor = 'emerald';
+                                                    } else if (b.net > 0) {
+                                                        statusLabel = '總應付給他人';
+                                                        statusAmount = formatMoney(b.net);
+                                                        statusColor = 'rose';
+                                                    } else {
+                                                        statusLabel = '剛好打平';
+                                                        statusColor = 'gray';
+                                                    }
+                                                } else {
+                                                    const centerName = center.id === 'me' ? myName : center.name;
+                                                    if (b.net > 0) {
+                                                        statusLabel = `應付給 ${centerName}`;
+                                                        statusAmount = formatMoney(b.net);
+                                                        statusColor = 'rose';
+                                                    } else if (b.net < 0) {
+                                                        statusLabel = `${centerName} 需退還`;
+                                                        statusAmount = formatMoney(Math.abs(b.net));
+                                                        statusColor = 'emerald';
+                                                    } else {
+                                                        statusLabel = '剛好打平';
+                                                        statusColor = 'gray';
+                                                    }
+                                                }
+
+                                                return (
+                                                    <div 
+                                                        key={b.id} 
+                                                        className="bg-white border border-primary-100 rounded-2xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:border-primary-300 hover:shadow-md transition-all active:scale-[0.98]"
+                                                        onClick={() => setSelectedDetailUserId(b.id)}
+                                                    >
+                                                        <div className="flex items-center gap-3 min-w-0 pr-2">
+                                                            <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-700 font-bold flex items-center justify-center flex-shrink-0 border border-primary-100">
+                                                                {b.id === 'me' ? (myName || '我')[0] : (b.name || '某')[0]}
+                                                            </div>
+                                                            <span className="font-bold text-primary-900 truncate">{b.id === 'me' ? myName : b.name}</span>
+                                                        </div>
+                                                        <div className="text-right flex-shrink-0">
+                                                            {statusColor !== 'gray' ? (
+                                                                <div>
+                                                                    <div className={`text-[10px] font-bold text-${statusColor}-500 mb-0.5`}>{statusLabel}</div>
+                                                                    <div className={`font-black text-${statusColor}-600 text-lg`}>{statusAmount}</div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="font-bold text-primary-400 bg-primary-50 px-3 py-1 rounded-lg text-xs border border-primary-100">剛好打平</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* 個人單日/行前 明細 Modal */}
+                                        {selectedDetailUserId && (() => {
+                                            const dUser = balances.find(u => u.id === selectedDetailUserId);
+                                            if (!dUser) return null;
+                                            
+                                            // 過濾出與該用戶有關的消費（他墊付的 or 他有分攤的）
+                                            const dExpenses = currentExpenses.filter(e => e.paidBy === selectedDetailUserId || e.payerIds.includes(selectedDetailUserId));
+
+                                            return (
+                                                <div className="fixed inset-0 bg-primary-950/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onClick={() => setSelectedDetailUserId(null)}>
+                                                    <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl max-h-[85vh] flex flex-col shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
+                                                        {/* Header */}
+                                                        <div className="px-6 py-5 border-b border-primary-100 flex justify-between items-center bg-white sm:rounded-t-2xl rounded-t-3xl z-10 shrink-0">
+                                                            <div>
+                                                                <h3 className="text-xl font-black text-primary-900">{dUser.id === 'me' ? myName : dUser.name} 的明細</h3>
+                                                                <p className="text-xs text-primary-400 mt-1">{phase === 'pre' ? '出發前 (行前款)' : `${selectedDate.replace(/-/g, '/')} (當地消費)`}</p>
+                                                            </div>
+                                                            <button onClick={() => setSelectedDetailUserId(null)} className="w-8 h-8 bg-primary-50 rounded-full flex items-center justify-center text-primary-500 hover:bg-primary-100 transition"><Icon name="Xmark" size={16} /></button>
+                                                        </div>
+                                                        
+                                                        {/* 逐筆列表 */}
+                                                        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white">
+                                                            {dExpenses.length === 0 ? (
+                                                                <div className="text-center text-primary-400 py-6 text-sm font-bold">無相關消費明細</div>
+                                                            ) : (
+                                                                dExpenses.map(exp => {
+                                                                    const finalT = exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD;
+                                                                    const uPaid = exp.paidBy === selectedDetailUserId ? finalT : 0;
+                                                                    const uShare = calculateFriendShare(exp, selectedDetailUserId);
+                                                                    const uNet = uPaid - uShare; 
+                                                                    const cat = CATEGORIES.find(c => c.id === exp.category);
+                                                                    
+                                                                    return (
+                                                                        <div key={exp.id} className="bg-primary-50/50 border border-primary-100 rounded-xl p-4 flex justify-between items-center">
+                                                                            <div className="flex items-center gap-3">
+                                                                                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm text-primary-600 border border-primary-100 flex-shrink-0">
+                                                                                    <Icon name={cat?.icon || 'Other'} />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <div className="font-bold text-primary-800 text-sm leading-snug">{exp.title}</div>
+                                                                                    <div className="text-[10px] text-primary-400 mt-1 font-bold tracking-wider">總額 {formatMoney(finalT)}</div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="text-right text-xs space-y-0.5 whitespace-nowrap">
+                                                                                {uPaid > 0 && <div className="text-emerald-600 font-bold">代墊 +{formatMoney(uPaid)}</div>}
+                                                                                {uShare > 0 && <div className="text-rose-600 font-bold">應付 -{formatMoney(uShare)}</div>}
+                                                                                <div className={`font-black pt-1 mt-1 border-t border-primary-200/50 ${uNet > 0 ? 'text-emerald-600' : uNet < 0 ? 'text-rose-600' : 'text-primary-400'}`}>
+                                                                                    小計: {uNet > 0 ? '+' : ''}{formatMoney(uNet)}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    )
+                                                                })
+                                                            )}
+                                                        </div>
+                                                        
+                                                        {/* Summary Bottom */}
+                                                        <div className="p-5 border-t border-primary-100 bg-primary-50 sm:rounded-b-2xl shrink-0">
+                                                            <div className="flex justify-between items-center text-sm mb-1.5">
+                                                                <span className="text-primary-500 font-bold">當日總代墊</span>
+                                                                <span className="text-emerald-600 font-bold">+{formatMoney(dUser.paid)}</span>
+                                                            </div>
+                                                            <div className="flex justify-between items-center text-sm mb-3">
+                                                                <span className="text-primary-500 font-bold">當日總應付 (自身花費)</span>
+                                                                <span className="text-rose-600 font-bold">-{formatMoney(dUser.shouldPay)}</span>
+                                                            </div>
+                                                            <div className="flex justify-between items-center text-base pt-3 border-t border-primary-200">
+                                                                <span className="text-primary-900 font-black tracking-widest">結算淨值</span>
+                                                                <span className={`font-black text-xl ${dUser.net > 0 ? 'text-rose-600' : dUser.net < 0 ? 'text-emerald-600' : 'text-primary-500'}`}>
+                                                                    {dUser.net > 0 ? `需付 ${formatMoney(dUser.net)}` : dUser.net < 0 ? `應收回 ${formatMoney(Math.abs(dUser.net))}` : '剛好打平'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                );
+            }
+
             // --- View: Checkout List (收付款總紀錄) ---
             if (view === 'checkoutList') {
                 const users = { 'me': { id: 'me', name: myName }, ...friends.reduce((acc, f) => ({...acc, [f.id]: f}), {}) };
@@ -1207,7 +1513,6 @@
                 const preExps = expenses.filter(e => e.phase === 'pre' && (e.paidBy === userId || e.payerIds.includes(userId)));
                 const tripExps = expenses.filter(e => e.phase === 'trip' && (e.paidBy === userId || e.payerIds.includes(userId)));
                 
-                const filteredPreExps = preExps.filter(e => e.date === detailSelectedPreDate);
                 const filteredTripExps = tripExps.filter(e => e.date === detailSelectedTripDate);
 
                 const getTabDailyTotal = (exps) => {
@@ -1275,18 +1580,18 @@
                             {/* Tab Content: 出發前明細 */}
                             {detailTab === 'pre' && (
                                 <div className="animate-fade-in space-y-4">
-                                    {preDates.length > 0 ? (
+                                    {preExps.length > 0 ? (
                                         <div className="bg-white p-3 rounded-2xl border border-primary-100 shadow-sm flex justify-between items-center gap-3">
-                                            <div className="relative w-[150px] flex-shrink-0">
-                                                <select value={detailSelectedPreDate} onChange={(e) => setDetailSelectedPreDate(e.target.value)} className="w-full appearance-none bg-primary-50 py-2.5 pl-3 pr-8 rounded-xl font-bold text-primary-800 outline-none border border-transparent focus:border-primary-300 transition text-[16px] text-center">
-                                                    {preDates.map(date => (<option key={date} value={date}>{date.replace(/-/g, '/')}</option>))}
-                                                </select>
-                                                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-500 pointer-events-none"><Icon name="ChevronDown" size={14} /></div>
+                                            <div className="flex items-center gap-3 pl-3 py-1 flex-shrink-0">
+                                                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                                                    <Icon name="Calendar" size={20} />
+                                                </div>
+                                                <span className="font-bold text-primary-800 text-[16px]">出發前全部明細</span>
                                             </div>
                                             <div className="flex-1 text-right pr-1">
-                                                <div className="text-[10px] font-bold text-primary-400 mb-0.5">當日結算小計</div>
-                                                <div className={`text-xl font-black leading-none truncate ${getTabDailyTotal(filteredPreExps) > 0 ? 'text-rose-600' : getTabDailyTotal(filteredPreExps) < 0 ? 'text-emerald-600' : 'text-primary-800'}`}>
-                                                    {getTabDailyTotal(filteredPreExps) > 0 ? '+' : ''}{formatMoney(getTabDailyTotal(filteredPreExps))}
+                                                <div className="text-[10px] font-bold text-primary-400 mb-0.5">出發前結算小計</div>
+                                                <div className={`text-xl font-black leading-none truncate ${getTabDailyTotal(preExps) > 0 ? 'text-rose-600' : getTabDailyTotal(preExps) < 0 ? 'text-emerald-600' : 'text-primary-800'}`}>
+                                                    {getTabDailyTotal(preExps) > 0 ? '+' : ''}{formatMoney(getTabDailyTotal(preExps))}
                                                 </div>
                                             </div>
                                         </div>
@@ -1297,9 +1602,9 @@
                                         </div>
                                     )}
 
-                                    {filteredPreExps.length > 0 && (
+                                    {preExps.length > 0 && (
                                         <div className="bg-white rounded-3xl p-3 shadow-sm border border-primary-100">
-                                            {filteredPreExps.map(exp => {
+                                            {preExps.map(exp => {
                                                 const finalT = exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD;
                                                 const uPaid = exp.paidBy === userId ? finalT : 0;
                                                 const uShare = calculateFriendShare(exp, userId);
@@ -1314,7 +1619,7 @@
                                                             </div>
                                                             <div>
                                                                 <div className="font-bold text-primary-900 text-sm">{exp.title}</div>
-                                                                <div className="text-[10px] text-primary-400 mt-1 font-bold">總額 {formatMoney(finalT)}</div>
+                                                                <div className="text-[10px] text-primary-400 mt-1 font-bold">{exp.date.replace(/-/g, '/')} · 總額 {formatMoney(finalT)}</div>
                                                             </div>
                                                         </div>
                                                         <div className="text-right">
@@ -1332,8 +1637,8 @@
                                         </div>
                                     )}
                                     
-                                    {preDates.length > 0 && (
-                                        <button onClick={() => handleAddRepaymentFromContext(detailSelectedPreDate)} className="w-full bg-primary-100 text-primary-700 py-3.5 rounded-2xl font-bold shadow-sm active:scale-[0.98] transition hover:bg-primary-200 flex items-center justify-center gap-2">
+                                    {preExps.length > 0 && (
+                                        <button onClick={() => handleAddRepaymentFromContext('')} className="w-full bg-primary-100 text-primary-700 py-3.5 rounded-2xl font-bold shadow-sm active:scale-[0.98] transition hover:bg-primary-200 flex items-center justify-center gap-2">
                                             <Icon name="Plus" size={16}/> 新增出發前收付款
                                         </button>
                                     )}
