@@ -687,45 +687,13 @@
 
             // --- View: Summary (Checkout / Settlement) ---
             if (view === 'summary') {
-                const currentPhaseExpenses = expenses.filter(e => e.phase === phase);
-
-                const balances = friends.map(friend => {
-                    let oweMe = 0; // friend owes me
-                    let iOwe = 0;  // I owe friend
-
-                    currentPhaseExpenses.forEach(exp => {
-                        // 如果是我先付的，計算該朋友該給我多少
-                        if (exp.paidBy === 'me') {
-                            if (exp.payerIds.includes(friend.id)) {
-                                oweMe += calculateFriendShare(exp, friend.id);
-                            }
-                        } 
-                        // 如果是該朋友先付的，計算我該給他多少
-                        else if (exp.paidBy === friend.id) {
-                            if (exp.payerIds.includes('me')) {
-                                iOwe += calculateFriendShare(exp, 'me');
-                            }
-                        }
-                    });
-
-                    return {
-                        ...friend,
-                        oweMe,
-                        iOwe,
-                        netBalance: oweMe - iOwe // 正數代表我該收的，負數代表我該付的
-                    };
-                });
-
-                const totalToCollect = balances.reduce((sum, b) => b.netBalance > 0 ? sum + b.netBalance : sum, 0);
-                const totalToPay = balances.reduce((sum, b) => b.netBalance < 0 ? sum + Math.abs(b.netBalance) : sum, 0);
-
                 return (
                     <div className="max-w-3xl mx-auto min-h-screen bg-white flex flex-col animate-fade-in relative pb-24">
                         <div className="bg-white sticky top-0 z-20 shadow-sm border-b border-primary-100">
                             <div className="px-5 pt-6 pb-2 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <button onClick={() => setView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50 transition active:scale-95"><Icon name="ArrowLeft" size={20}/></button>
-                                    <h2 className="text-2xl font-black text-primary-900 tracking-tight">結算總覽</h2>
+                                    <h2 className="text-2xl font-black text-primary-900 tracking-tight">結算清單</h2>
                                 </div>
                             </div>
                             <div className="flex px-5 pb-4 gap-4 mt-2">
@@ -735,47 +703,129 @@
                         </div>
 
                         <div className="p-5">
-                            <div className="grid grid-cols-2 gap-4 mb-6">
-                                <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100 shadow-sm">
-                                    <div className="text-[11px] font-bold text-emerald-600 mb-1 flex items-center gap-1.5 uppercase tracking-wider"><Icon name="FileInvoiceDollar" size={14}/> 總應收 (別人欠我)</div>
-                                    <div className="text-3xl font-black text-emerald-700 mt-2">{formatMoney(totalToCollect)}</div>
+                            {phase === 'trip' && (
+                                <div className="mb-6">
+                                    <label className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-2 block pl-1">選擇結算日期</label>
+                                    {tripDates.length > 0 ? (
+                                        <div className="relative">
+                                            <select value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full appearance-none bg-white border border-primary-200 p-3 rounded-xl font-bold text-primary-800 outline-none focus:border-primary-400 transition text-[16px] shadow-sm">
+                                                {tripDates.map(date => (<option key={date} value={date}>{date.replace(/-/g, '/')}</option>))}
+                                            </select>
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none"><Icon name="ChevronDown" size={14} /></div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-sm text-primary-400 bg-primary-50 p-3 rounded-xl border border-primary-100 text-center">無旅程中消費紀錄</div>
+                                    )}
                                 </div>
-                                <div className="bg-rose-50 rounded-2xl p-4 border border-rose-100 shadow-sm">
-                                    <div className="text-[11px] font-bold text-rose-600 mb-1 flex items-center gap-1.5 uppercase tracking-wider"><Icon name="Cash" size={14}/> 總應付 (我欠別人)</div>
-                                    <div className="text-3xl font-black text-rose-700 mt-2">{formatMoney(totalToPay)}</div>
-                                </div>
-                            </div>
+                            )}
 
-                            <h3 className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-3 pl-1">成員明細</h3>
-                            <div className="space-y-3">
-                                {balances.length === 0 ? (
-                                    <div className="text-center py-12 text-primary-300 text-sm font-bold bg-primary-50 rounded-2xl border border-primary-100">尚未新增成員</div>
-                                ) : (
-                                    balances.map(b => (
-                                        <div key={b.id} className="bg-white border border-primary-100 rounded-2xl p-5 flex items-center justify-between shadow-[0_2px_8px_-3px_rgba(0,0,0,0.05)]">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 rounded-full bg-primary-100 text-primary-700 font-bold flex items-center justify-center text-lg">{b.name[0]}</div>
-                                                <span className="font-bold text-primary-900 text-lg tracking-wide">{b.name}</span>
+                            {(() => {
+                                // 初始化所有成員數據
+                                const users = { 'me': { id: 'me', name: '我自己', paid: 0, shouldPay: 0 } };
+                                friends.forEach(f => users[f.id] = { id: f.id, name: f.name, paid: 0, shouldPay: 0 });
+
+                                // 過濾當前階段/日期的帳目
+                                let currentExpenses = [];
+                                if (phase === 'pre') {
+                                    currentExpenses = expenses.filter(e => e.phase === 'pre');
+                                } else {
+                                    if (!selectedDate) return null;
+                                    currentExpenses = expenses.filter(e => e.phase === 'trip' && e.date === selectedDate);
+                                }
+
+                                if (currentExpenses.length === 0) {
+                                    return (
+                                        <div className="text-center py-10 animate-fade-in">
+                                            <div className="bg-primary-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 text-primary-300">
+                                                <Icon name="Check" size={24} />
                                             </div>
-                                            <div className="text-right">
-                                                {b.netBalance > 0 ? (
-                                                    <div>
-                                                        <div className="text-[10px] font-bold text-emerald-500 mb-0.5 uppercase tracking-wider">應向他收</div>
-                                                        <div className="font-black text-emerald-600 text-xl">{formatMoney(b.netBalance)}</div>
+                                            <p className="font-bold text-primary-500">目前無帳目需要結算</p>
+                                        </div>
+                                    );
+                                }
+
+                                // 累加代墊總額與應分攤總額
+                                currentExpenses.forEach(exp => {
+                                    const finalTotal = exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD;
+                                    
+                                    // 墊款人增加 paid
+                                    if (users[exp.paidBy]) users[exp.paidBy].paid += finalTotal;
+                                    
+                                    // 每個分攤對象增加 shouldPay
+                                    exp.payerIds.forEach(pid => {
+                                        if (users[pid]) users[pid].shouldPay += calculateFriendShare(exp, pid);
+                                    });
+                                });
+
+                                // 計算每個人最後的 Net (正數代表需給錢，負數代表可拿回錢)
+                                const balances = Object.values(users).map(u => ({
+                                    ...u,
+                                    net: u.shouldPay - u.paid
+                                }));
+
+                                // 決定結算中心
+                                let center;
+                                if (phase === 'pre') {
+                                    // 出發前永遠以自己為中心
+                                    center = balances.find(b => b.id === 'me');
+                                } else {
+                                    // 旅程中找出當天代墊最多的人
+                                    center = balances.reduce((max, u) => u.paid > max.paid ? u : max, balances[0]);
+                                }
+
+                                const others = balances.filter(b => b.id !== center.id);
+
+                                return (
+                                    <div className="animate-fade-in">
+                                        {/* 結算中心資訊卡片 */}
+                                        <div className={`rounded-2xl p-5 text-white shadow-lg mb-6 ${phase === 'pre' ? 'bg-amber-600' : 'bg-emerald-600'}`}>
+                                            <div className="flex justify-between items-center mb-4">
+                                                <span className="text-xs font-bold text-white/80 uppercase tracking-widest">{phase === 'pre' ? '行前' : '本日'}結算中心</span>
+                                                <span className="bg-black/20 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-sm border border-white/10">代墊: {formatMoney(center.paid)}</span>
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-14 h-14 rounded-full bg-white text-primary-800 font-black flex items-center justify-center text-xl shadow-inner flex-shrink-0">
+                                                    {center.id === 'me' ? '我' : center.name[0]}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-2xl font-black truncate">{center.name}</div>
+                                                    <div className="text-sm text-white/90 mt-1 font-medium">
+                                                        {center.net < 0 ? `扣除自身花費後，將收回 ${formatMoney(Math.abs(center.net))}` : 
+                                                         center.net > 0 ? `扣除代墊後，仍需付給他人 ${formatMoney(center.net)}` : '自身花費與代墊剛好打平'}
                                                     </div>
-                                                ) : b.netBalance < 0 ? (
-                                                    <div>
-                                                        <div className="text-[10px] font-bold text-rose-500 mb-0.5 uppercase tracking-wider">應付給他</div>
-                                                        <div className="font-black text-rose-600 text-xl">{formatMoney(Math.abs(b.netBalance))}</div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="font-bold text-primary-400 bg-primary-50 px-4 py-2 rounded-xl text-sm border border-primary-100">已結清</div>
-                                                )}
+                                                </div>
                                             </div>
                                         </div>
-                                    ))
-                                )}
-                            </div>
+
+                                        <h3 className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-3 pl-1">結算明細 (多退少補)</h3>
+                                        <div className="space-y-3">
+                                            {others.map(b => (
+                                                <div key={b.id} className="bg-white border border-primary-100 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                                                    <div className="flex items-center gap-3 min-w-0 pr-2">
+                                                        <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-700 font-bold flex items-center justify-center flex-shrink-0 border border-primary-100">{b.id === 'me' ? '我' : b.name[0]}</div>
+                                                        <span className="font-bold text-primary-900 truncate">{b.name}</span>
+                                                    </div>
+                                                    <div className="text-right flex-shrink-0">
+                                                        {b.net > 0 ? (
+                                                            <div>
+                                                                <div className="text-[10px] font-bold text-rose-500 mb-0.5">應付給 {center.name}</div>
+                                                                <div className="font-black text-rose-600 text-lg">{formatMoney(b.net)}</div>
+                                                            </div>
+                                                        ) : b.net < 0 ? (
+                                                            <div>
+                                                                <div className="text-[10px] font-bold text-emerald-500 mb-0.5">{center.name} 需退還</div>
+                                                                <div className="font-black text-emerald-600 text-lg">{formatMoney(Math.abs(b.net))}</div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="font-bold text-primary-400 bg-primary-50 px-3 py-1 rounded-lg text-xs border border-primary-100">剛好打平</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     </div>
                 );
@@ -825,7 +875,7 @@
                             {/* 新增的結算按鈕 */}
                             <button onClick={() => setView('summary')} className="flex items-center gap-1.5 bg-primary-100 text-primary-700 px-3 py-1.5 rounded-full font-bold text-sm hover:bg-primary-200 transition active:scale-95 shadow-sm">
                                 <Icon name="FileInvoiceDollar" size={14} />
-                                結算
+                                結算清單
                             </button>
                         </div>
                         <div className="flex px-5 pb-4 gap-4 mt-2">
