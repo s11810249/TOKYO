@@ -83,10 +83,6 @@
                             800: '#6e543b',
                             900: '#5a4532',
                             950: '#302318',
-                        },
-                        accent: {
-                            500: '#a97573',
-                            600: '#8e5d5b',
                         }
                     },
                     fontFamily: {
@@ -256,7 +252,6 @@
             
             // 個人結算與結帳 Modal 狀態
             const [selectedDetailUserId, setSelectedDetailUserId] = useState(null);
-            // 結帳明細 Tabs (bills = 帳單明細, records = 收付款紀錄)
             const [detailTab, setDetailTab] = useState('bills');
 
             // Data State
@@ -281,10 +276,10 @@
             const [newFriendName, setNewFriendName] = useState('');
             const [isFriendModalOpen, setIsFriendModalOpen] = useState(false);
             
-            // Repayment Form State
+            // Repayment Form State (新增 twdAmount 處理雙向綁定)
             const [repaymentForm, setRepaymentForm] = useState({
                 payerId: '', payeeId: 'me', amount: '', currency: 'TWD', 
-                date: new Date().toISOString().split('T')[0], refDate: '', spotBuy: '', cashBuy: '', note: ''
+                date: new Date().toISOString().split('T')[0], refDate: '', spotBuy: '', cashBuy: '', note: '', twdAmount: ''
             });
             
             // Rate Center Modal State
@@ -315,12 +310,29 @@
                 }
             }, [form.date, form.paymentMethod, form.currency, getRateForConfig, editingId]);
 
-            // --- 確保 useEffect 位於最外層 ---
+            // 日幣還款：自動帶入匯率並雙向更新
             useEffect(() => {
                 if (repaymentForm.currency === 'JPY' && repaymentForm.refDate) {
                     const sBuy = rateConfig[repaymentForm.refDate]?.spotBuy || '';
                     const cBuy = rateConfig[repaymentForm.refDate]?.cashBuy || '';
-                    setRepaymentForm(prev => ({ ...prev, spotBuy: sBuy, cashBuy: cBuy }));
+                    
+                    setRepaymentForm(prev => {
+                        let newTwd = prev.twdAmount;
+                        let newJpy = prev.amount;
+                        const parsedS = parseFloat(sBuy) || 0;
+                        const parsedC = parseFloat(cBuy) || 0;
+                        
+                        if (parsedS > 0 && parsedC > 0) {
+                             const eff = parsedS - (parsedS - parsedC) * 0.5;
+                             // 若有日幣，優先用日幣推台幣；若無日幣但有台幣，用台幣推日幣
+                             if (prev.twdAmount && !prev.amount) {
+                                 newJpy = Math.ceil(parseFloat(prev.twdAmount) / eff).toString();
+                             } else if (prev.amount) {
+                                 newTwd = Math.round(parseFloat(prev.amount) * eff).toString();
+                             }
+                        }
+                        return { ...prev, spotBuy: sBuy, cashBuy: cBuy, twdAmount: newTwd, amount: newJpy };
+                    });
                 }
             }, [repaymentForm.refDate, repaymentForm.currency, rateConfig]); 
 
@@ -382,8 +394,8 @@
             };
 
             const handleSaveRepayment = () => {
-                if (!repaymentForm.payerId || !repaymentForm.payeeId || !repaymentForm.amount) {
-                    return alert('請填寫完整資訊');
+                if (!repaymentForm.payerId || !repaymentForm.payeeId) {
+                    return alert('請填寫還款與收款人');
                 }
                 if (repaymentForm.payerId === repaymentForm.payeeId) {
                     return alert('還款人與收款人不能是同一人');
@@ -394,14 +406,17 @@
 
                 if (repaymentForm.currency === 'TWD') {
                     finalTwdOffset = parseInt(repaymentForm.amount);
+                    if (!finalTwdOffset) return alert('請輸入還款金額');
                 } else {
+                    finalTwdOffset = parseInt(repaymentForm.twdAmount);
+                    if (!finalTwdOffset || !repaymentForm.amount) return alert('請輸入日幣還款金額或欲折抵台幣');
+                    
                     const sBuy = parseFloat(repaymentForm.spotBuy) || 0;
                     const cBuy = parseFloat(repaymentForm.cashBuy) || 0;
                     if (sBuy === 0 || cBuy === 0) return alert('請輸入有效的即期買入與現鈔買入匯率');
                     
                     const costPerUnit = (sBuy - cBuy) * 0.5;
                     effectiveRate = sBuy - costPerUnit;
-                    finalTwdOffset = Math.round(parseFloat(repaymentForm.amount) * effectiveRate);
                 }
 
                 const newRepayment = {
@@ -560,7 +575,7 @@
                         {/* 匯率懸浮視窗 (Modal) */}
                         {isRateModalOpen && (
                             <div className="fixed inset-0 bg-primary-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto pt-10 pb-10">
-                                <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+                                <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl">
                                     <div className="px-5 py-4 border-b border-primary-100 flex justify-between items-center bg-primary-50">
                                         <h3 className="font-bold text-primary-900 flex items-center gap-2">
                                             <Icon name="Edit" size={16} className="text-primary-500"/>
@@ -671,7 +686,7 @@
                         {/* 新增成員懸浮視窗 (Modal) */}
                         {isFriendModalOpen && (
                             <div className="fixed inset-0 bg-primary-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-                                <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+                                <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl">
                                     <div className="px-5 py-4 border-b border-primary-100 flex justify-between items-center bg-primary-50">
                                         <h3 className="font-bold text-primary-900 flex items-center gap-2">新增成員</h3>
                                         <button onClick={() => setIsFriendModalOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-full text-primary-400 hover:bg-primary-200 hover:text-primary-700 transition"><Icon name="Xmark" size={16}/></button>
@@ -852,24 +867,56 @@
                 );
             }
 
-            // --- View: Add Repayment (新增還款紀錄) ---
+            // --- View: Add Repayment (新增雙向匯率還款紀錄) ---
             if (view === 'addRepayment') {
                 const isJPY = repaymentForm.currency === 'JPY';
                 
-                let offsetTwd = 0;
-                let effectiveRateStr = '-';
-                if (isJPY) {
+                // 動態計算有效匯率
+                const effRate = useMemo(() => {
                     const s = parseFloat(repaymentForm.spotBuy) || 0;
                     const c = parseFloat(repaymentForm.cashBuy) || 0;
-                    if (s > 0 && c > 0) {
-                        const cost = (s - c) * 0.5;
-                        const eff = s - cost;
-                        effectiveRateStr = eff.toFixed(4);
-                        offsetTwd = Math.round((parseFloat(repaymentForm.amount) || 0) * eff);
+                    if (s > 0 && c > 0) return s - (s - c) * 0.5;
+                    return 0;
+                }, [repaymentForm.spotBuy, repaymentForm.cashBuy]);
+
+                const effectiveRateStr = effRate > 0 ? effRate.toFixed(4) : '-';
+
+                // 處理上方主要金額變更 (若為 JPY，則是使用者輸入日幣)
+                const handleMainAmountChange = (e) => {
+                    const val = e.target.value;
+                    if (isJPY) {
+                        const twd = (val && effRate > 0) ? Math.round(parseFloat(val) * effRate).toString() : '';
+                        setRepaymentForm(prev => ({ ...prev, amount: val, twdAmount: twd }));
+                    } else {
+                        setRepaymentForm(prev => ({ ...prev, amount: val }));
                     }
-                } else {
-                    offsetTwd = parseInt(repaymentForm.amount) || 0;
-                }
+                };
+
+                // 處理下方折抵台幣變更 (使用者輸入台幣，反推需要多少日幣)
+                const handleTwdAmountChange = (e) => {
+                    const val = e.target.value;
+                    const jpy = (val && effRate > 0) ? Math.ceil(parseFloat(val) / effRate).toString() : '';
+                    setRepaymentForm(prev => ({ ...prev, twdAmount: val, amount: jpy }));
+                };
+
+                // 處理匯率手動修改
+                const handleManualRateChange = (field, val) => {
+                    setRepaymentForm(prev => {
+                        const next = { ...prev, [field]: val };
+                        const s = parseFloat(next.spotBuy) || 0;
+                        const c = parseFloat(next.cashBuy) || 0;
+                        if (s > 0 && c > 0) {
+                             const eff = s - (s - c) * 0.5;
+                             // 若已有欲折抵台幣，則重新計算所需日幣
+                             if (next.twdAmount) {
+                                 next.amount = Math.ceil(parseFloat(next.twdAmount) / eff).toString();
+                             } else if (next.amount) {
+                                 next.twdAmount = Math.round(parseFloat(next.amount) * eff).toString();
+                             }
+                        }
+                        return next;
+                    });
+                };
 
                 return (
                     <div className="max-w-2xl mx-auto min-h-screen bg-white flex flex-col animate-fade-in">
@@ -909,27 +956,37 @@
 
                             <div className="space-y-4">
                                 <div className="flex justify-between items-end">
-                                    <label className="text-xs font-bold text-primary-400">金額 & 幣別</label>
+                                    <label className="text-xs font-bold text-primary-400">輸入金額 & 幣別</label>
                                     <div className="flex bg-primary-100 rounded-lg p-1">
                                         {['TWD', 'JPY'].map(c => (
                                             <button key={c} onClick={() => setRepaymentForm({...repaymentForm, currency: c})} className={`px-3 py-1 rounded-md text-xs font-bold transition ${repaymentForm.currency === c ? 'bg-white shadow text-primary-800' : 'text-primary-400'}`}>{c}</button>
                                         ))}
                                     </div>
                                 </div>
-                                <div className="relative input-focus bg-primary-50 rounded-2xl border border-transparent">
-                                    <input type="number" inputMode="decimal" value={repaymentForm.amount} onChange={e => setRepaymentForm({...repaymentForm, amount: e.target.value})} className="w-full bg-transparent p-4 text-4xl font-black text-primary-800 outline-none placeholder-primary-200" placeholder="0" />
+                                <div className="relative input-focus bg-primary-50 rounded-2xl border border-transparent flex items-center">
+                                    <input 
+                                        type="number" 
+                                        inputMode="decimal" 
+                                        value={repaymentForm.amount} 
+                                        onChange={handleMainAmountChange} 
+                                        className="w-full bg-transparent p-4 text-4xl font-black text-primary-800 outline-none placeholder-primary-200" 
+                                        placeholder={isJPY ? "輸入日幣" : "0"} 
+                                    />
+                                    {isJPY && <span className="pr-4 font-bold text-primary-300">JPY</span>}
                                 </div>
                             </div>
 
-                            {/* 日幣專屬：基準日選擇與匯差計算 */}
+                            {/* 日幣專屬：雙向基準日選擇與匯差計算 */}
                             {isJPY && (
                                 <div className="bg-amber-50 rounded-2xl p-5 border border-amber-100 space-y-4 animate-fade-in">
-                                    <div className="flex items-center gap-2 mb-2 text-amber-700 font-bold text-sm">
-                                        <Icon name="RightLeft" size={16} /> 收取日幣現鈔換算
+                                    <div className="flex justify-between items-center mb-2">
+                                        <div className="text-amber-700 font-bold text-sm flex items-center gap-2">
+                                            <Icon name="RightLeft" size={16} /> 日幣現鈔智慧換算
+                                        </div>
                                     </div>
                                     
                                     <div>
-                                        <label className="text-[10px] font-bold text-amber-600 block mb-1 uppercase tracking-wider">選擇對應消費日 (抓取匯率)</label>
+                                        <label className="text-[10px] font-bold text-amber-600 block mb-1 uppercase tracking-wider">選擇對應消費日 (自動抓匯率)</label>
                                         <div className="relative">
                                             <select value={repaymentForm.refDate} onChange={e => setRepaymentForm({...repaymentForm, refDate: e.target.value})} className="w-full appearance-none bg-white p-3 rounded-xl font-bold text-amber-900 outline-none border border-amber-200 focus:border-amber-400 transition text-[16px]">
                                                 <option value="" disabled>請選擇消費日</option>
@@ -942,23 +999,35 @@
                                     <div className="grid grid-cols-2 gap-3">
                                         <div>
                                             <label className="text-[10px] font-bold text-amber-600 block mb-1">即期買入</label>
-                                            <input type="number" step="0.0001" value={repaymentForm.spotBuy} onChange={e => setRepaymentForm({...repaymentForm, spotBuy: e.target.value})} placeholder="0.2002" className="w-full bg-white border border-amber-200 p-2.5 rounded-xl font-bold outline-none focus:border-amber-400 transition text-[16px] text-amber-900" />
+                                            <input type="number" step="0.0001" value={repaymentForm.spotBuy} onChange={e => handleManualRateChange('spotBuy', e.target.value)} placeholder="0.2002" className="w-full bg-white border border-amber-200 p-2.5 rounded-xl font-bold outline-none focus:border-amber-400 transition text-[16px] text-amber-900" />
                                         </div>
                                         <div>
                                             <label className="text-[10px] font-bold text-amber-600 block mb-1">現鈔買入</label>
-                                            <input type="number" step="0.0001" value={repaymentForm.cashBuy} onChange={e => setRepaymentForm({...repaymentForm, cashBuy: e.target.value})} placeholder="0.1937" className="w-full bg-white border border-amber-200 p-2.5 rounded-xl font-bold outline-none focus:border-amber-400 transition text-[16px] text-amber-900" />
+                                            <input type="number" step="0.0001" value={repaymentForm.cashBuy} onChange={e => handleManualRateChange('cashBuy', e.target.value)} placeholder="0.1937" className="w-full bg-white border border-amber-200 p-2.5 rounded-xl font-bold outline-none focus:border-amber-400 transition text-[16px] text-amber-900" />
                                         </div>
                                     </div>
                                     
-                                    <div className="bg-white/60 p-3 rounded-xl border border-amber-200/50 mt-2 text-[11px] leading-relaxed font-medium text-amber-800">
-                                        <div className="flex justify-between mb-1">
-                                            <span>有效匯率推算</span>
-                                            <span className="font-bold">{effectiveRateStr}</span>
+                                    <div className="bg-white/60 p-3 rounded-xl border border-amber-200/50 mt-2">
+                                        <div className="flex justify-between items-center mb-2 pb-2 border-b border-amber-200/50 text-[12px] text-amber-800">
+                                            <div>
+                                                <span className="block font-bold">目前有效匯率</span>
+                                            </div>
+                                            <span className="font-black text-lg">{effectiveRateStr}</span>
                                         </div>
-                                        <div className="text-amber-600/80 mb-2 border-b border-amber-200/50 pb-2">公式: 即期 - ((即期 - 現鈔) ÷ 2)</div>
+                                        
                                         <div className="flex justify-between items-center pt-1">
-                                            <span className="font-bold">可折抵台幣總額</span>
-                                            <span className="text-lg font-black text-amber-600">{formatMoney(offsetTwd)}</span>
+                                            <span className="font-bold text-amber-800 text-[12px]">欲折抵台幣總額 <br/><span className="text-[9px] font-normal opacity-80">(直接輸入，自動推算日幣)</span></span>
+                                            <div className="flex items-center gap-1.5">
+                                                <input 
+                                                    type="number" 
+                                                    inputMode="decimal" 
+                                                    value={repaymentForm.twdAmount} 
+                                                    onChange={handleTwdAmountChange} 
+                                                    placeholder="輸入台幣" 
+                                                    className="w-24 text-right bg-white p-2 rounded-md text-sm font-black text-rose-600 outline-none border border-amber-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all"
+                                                />
+                                                <span className="text-xs font-bold text-amber-600">TWD</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -977,9 +1046,9 @@
                         </div>
 
                         <div className="p-4 border-t border-primary-100 bg-white sticky bottom-0 safe-bottom">
-                            {isJPY && (
-                                <div className="text-center text-xs font-bold text-primary-400 mb-3">
-                                    這筆款項將為收款人折抵 <span className="text-primary-800 text-base mx-1">{formatMoney(offsetTwd)}</span> TWD 的欠款
+                            {isJPY && repaymentForm.amount && (
+                                <div className="text-center text-xs font-bold text-primary-500 mb-3 animate-fade-in">
+                                    此筆將折抵收款人 <span className="text-primary-800 text-base mx-1 bg-primary-50 px-2 py-0.5 rounded">{formatMoney(repaymentForm.twdAmount || 0)}</span> TWD 欠款
                                 </div>
                             )}
                             <button onClick={handleSaveRepayment} className="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold shadow-md active:scale-[0.98] transition hover:bg-emerald-700">儲存紀錄</button>
@@ -1397,7 +1466,7 @@
 
                         <div className="px-5 pb-5 space-y-6">
                             {/* 總結大卡片 - 簡約現代白底設計 */}
-                            <div className="bg-white rounded-3xl p-6 shadow-sm border border-primary-100 relative overflow-hidden">
+                            <div className="bg-white rounded-3xl p-6 shadow-sm border border-primary-100">
                                 <div className="flex justify-between items-center mb-3">
                                     <div className="text-primary-400 text-xs font-bold uppercase tracking-widest">最終結算淨值</div>
                                     <div className={`text-xs font-bold px-3 py-1 rounded-full ${globalNet > 0 ? 'bg-rose-50 text-rose-600' : globalNet < 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-primary-50 text-primary-500'}`}>
@@ -1413,10 +1482,10 @@
 
                             {/* Tabs 頁籤切換 */}
                             <div className="flex bg-white/50 p-1.5 rounded-2xl border border-primary-100 shadow-sm backdrop-blur-sm">
-                                <button onClick={() => setDetailTab('bills')} className={`flex-1 py-3 rounded-xl text-[15px] font-bold transition-all duration-200 ${detailTab === 'bills' ? 'bg-white text-primary-800 shadow shadow-primary-200/50 scale-[1.02]' : 'text-primary-400 hover:text-primary-600'}`}>
+                                <button onClick={() => setDetailTab('bills')} className={`flex-1 py-3 rounded-xl text-[15px] font-bold transition-all duration-200 ${detailTab === 'bills' ? 'bg-white text-primary-800 shadow scale-[1.02]' : 'text-primary-400 hover:text-primary-600'}`}>
                                     帳單明細
                                 </button>
-                                <button onClick={() => setDetailTab('records')} className={`flex-1 py-3 rounded-xl text-[15px] font-bold transition-all duration-200 ${detailTab === 'records' ? 'bg-white text-primary-800 shadow shadow-primary-200/50 scale-[1.02]' : 'text-primary-400 hover:text-primary-600'}`}>
+                                <button onClick={() => setDetailTab('records')} className={`flex-1 py-3 rounded-xl text-[15px] font-bold transition-all duration-200 ${detailTab === 'records' ? 'bg-white text-primary-800 shadow scale-[1.02]' : 'text-primary-400 hover:text-primary-600'}`}>
                                     收付款紀錄
                                 </button>
                             </div>
@@ -1512,7 +1581,7 @@
                             setRepaymentForm({
                                 payerId: defaultPayer, payeeId: defaultPayee, amount: '', currency: 'TWD', 
                                 date: new Date().toISOString().split('T')[0], refDate: tripDates[tripDates.length - 1] || '', 
-                                spotBuy: '', cashBuy: '', note: ''
+                                spotBuy: '', cashBuy: '', note: '', twdAmount: ''
                             });
                             changeView('addRepayment');
                         }} className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-md bg-emerald-600 text-white flex items-center justify-center active:scale-90 transition transform hover:scale-105 z-30">
