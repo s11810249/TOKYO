@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- 防快取機制：確保 Web App 每次都抓取最新版本 -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
     <title>旅遊分帳 Pro Max</title>
     
     <!-- React & ReactDOM -->
@@ -38,7 +43,7 @@
                             950: '#1b2736',
                         },
                         accent: {
-                            500: '#e11d48', // Rose for debt
+                            500: '#e11d48',
                             600: '#be123c',
                         }
                     },
@@ -183,8 +188,12 @@
 
             if (exp.splitMode === 'exact') {
                 const exactAmt = parseFloat(exp.exactAmounts[targetId] || 0);
-                const targetBaseTWD = calculateBaseTWD(exactAmt, exp.currency, exp.rate);
-                return exp.hasFee ? Math.round(targetBaseTWD * 1.015) : targetBaseTWD;
+                const originalTotal = parseFloat(exp.originalAmount || 1);
+                if (originalTotal === 0) return 0;
+                
+                // 改用「比例」來分攤最後台幣總額，大幅降低浮點數運算及匯率換算帶來的四捨五入落差
+                const ratio = exactAmt / originalTotal;
+                return Math.round(finalTotal * ratio);
             } else {
                 return Math.ceil(finalTotal / exp.payerIds.length);
             }
@@ -198,6 +207,7 @@
             const [isMenuOpen, setIsMenuOpen] = useState(false); 
 
             // Data State
+            const [myName, setMyName] = useState(() => localStorage.getItem('tokyo_pro_my_name') || '我自己');
             const [friends, setFriends] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_friends')) || []; } catch { return []; } });
             const [expenses, setExpenses] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_expenses')) || []; } catch { return []; } });
             const [lastRate, setLastRate] = useState(() => localStorage.getItem('tokyo_last_rate') || '0.22');
@@ -225,6 +235,7 @@
             });
 
             // Persistence
+            useEffect(() => { localStorage.setItem('tokyo_pro_my_name', myName); }, [myName]);
             useEffect(() => { localStorage.setItem('tokyo_pro_friends', JSON.stringify(friends)); }, [friends]);
             useEffect(() => { localStorage.setItem('tokyo_pro_expenses', JSON.stringify(expenses)); }, [expenses]);
             useEffect(() => { localStorage.setItem('tokyo_last_rate', lastRate); }, [lastRate]);
@@ -250,8 +261,9 @@
                 if (form.splitMode === 'exact') {
                     const sumEntered = form.payerIds.reduce((acc, id) => acc + parseFloat(form.exactAmounts[id] || 0), 0);
                     const targetAmount = parseFloat(form.amount);
-                    if (Math.abs(sumEntered - targetAmount) > 0.01) {
-                        return alert(`個別分攤金額總和 (${sumEntered}) 不等於輸入總金額 (${targetAmount})，請修正後再儲存。`);
+                    // 放寬落差驗證，允許小於等於 2 的誤差，避免外幣轉換的極小數落差
+                    if (Math.abs(sumEntered - targetAmount) > 2) {
+                        return alert(`個別分攤金額總和 (${sumEntered}) 與輸入總金額 (${targetAmount}) 落差過大，請修正後再儲存。`);
                     }
                 }
 
@@ -480,9 +492,28 @@
                             <h2 className="text-xl font-bold text-primary-900">成員管理</h2>
                         </div>
                         
-                        <div className="space-y-3">
+                        <div className="space-y-4">
+                            {/* 自訂我的名稱 */}
+                            <div className="p-4 border border-primary-200 rounded-xl bg-primary-50 shadow-sm transition">
+                                <label className="text-xs font-bold text-primary-400 block mb-2">你的顯示名稱 (主揪)</label>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center text-white font-bold flex-shrink-0">
+                                        {(myName || '我')[0]}
+                                    </div>
+                                    <input 
+                                        value={myName} 
+                                        onChange={e => setMyName(e.target.value)} 
+                                        className="flex-1 bg-white p-2.5 rounded-lg font-bold text-primary-800 outline-none text-[16px] border border-transparent focus:border-primary-400 shadow-sm" 
+                                        placeholder="輸入你的名字" 
+                                    />
+                                </div>
+                            </div>
+
+                            <hr className="border-primary-100" />
+                            <h3 className="font-bold text-primary-400 text-xs uppercase tracking-wider pl-1">其他成員</h3>
+
                             {friends.length === 0 ? (
-                                <div className="text-center py-12 text-primary-300 text-sm">尚未新增任何成員，點擊右下角新增</div>
+                                <div className="text-center py-10 text-primary-300 text-sm">尚未新增任何成員，點擊右下角新增</div>
                             ) : (
                                 friends.map(f => (
                                     <div key={f.id} className="flex justify-between items-center p-4 border border-primary-100 rounded-xl bg-white shadow-sm transition">
@@ -598,7 +629,7 @@
                                         <label className="text-xs font-bold text-primary-400 block mb-1">墊款人</label>
                                         <div className="relative">
                                             <select value={form.paidBy} onChange={e => setForm({...form, paidBy: e.target.value})} className="w-full appearance-none bg-primary-50 p-3 rounded-xl font-bold text-primary-800 outline-none focus:ring-2 focus:ring-primary-400 transition text-[16px]">
-                                                <option value="me">我自己</option>
+                                                <option value="me">{myName}</option>
                                                 {friends.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                                             </select>
                                             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none"><Icon name="ChevronDown" size={14} /></div>
@@ -624,7 +655,7 @@
                                     
                                     {/* 均分模式介面 */}
                                     {form.splitMode === 'equal' && (
-                                        <div className="grid grid-cols-2 gap-2">{allIds.map(id => { const name = id === 'me' ? '我自己' : friends.find(f => f.id === id)?.name; return (<button key={id} onClick={() => { const newIds = form.payerIds.includes(id) ? form.payerIds.filter(pid => pid !== id) : [...form.payerIds, id]; setForm({...form, payerIds: newIds}); }} className={`p-2 rounded-lg flex items-center gap-2 border transition ${form.payerIds.includes(id) ? 'bg-white border-primary-500 text-primary-800 font-bold shadow-sm' : 'bg-transparent border-transparent text-primary-300'}`}><div className={`w-4 h-4 rounded-full flex items-center justify-center ${form.payerIds.includes(id) ? 'bg-primary-500 text-white' : 'bg-primary-200'}`}><Icon name="Check" size={10}/></div>{name}</button>) })}</div>
+                                        <div className="grid grid-cols-2 gap-2">{allIds.map(id => { const name = id === 'me' ? myName : friends.find(f => f.id === id)?.name; return (<button key={id} onClick={() => { const newIds = form.payerIds.includes(id) ? form.payerIds.filter(pid => pid !== id) : [...form.payerIds, id]; setForm({...form, payerIds: newIds}); }} className={`p-2 rounded-lg flex items-center gap-2 border transition ${form.payerIds.includes(id) ? 'bg-white border-primary-500 text-primary-800 font-bold shadow-sm' : 'bg-transparent border-transparent text-primary-300'}`}><div className={`w-4 h-4 rounded-full flex items-center justify-center ${form.payerIds.includes(id) ? 'bg-primary-500 text-white' : 'bg-primary-200'}`}><Icon name="Check" size={10}/></div>{name}</button>) })}</div>
                                     )}
 
                                     {/* 個別輸入模式介面 */}
@@ -632,7 +663,7 @@
                                         <div className="space-y-2">
                                             <div className="text-[10px] text-primary-400 mb-2">請輸入不含手續費的 {form.currency} 金額 (手續費系統會按比例附加)</div>
                                             {allIds.map(id => { 
-                                                const name = id === 'me' ? '我自己' : friends.find(f => f.id === id)?.name; 
+                                                const name = id === 'me' ? myName : friends.find(f => f.id === id)?.name; 
                                                 const isSelected = form.payerIds.includes(id);
                                                 return (
                                                     <div key={id} className={`p-2 rounded-lg flex items-center justify-between border transition ${isSelected ? 'bg-white border-primary-500 shadow-sm' : 'bg-transparent border-transparent'}`}>
@@ -674,8 +705,8 @@
                                 {form.splitMode === 'equal' ? (
                                     <span>每人: <span className="text-primary-800 text-lg">{formatMoney(perPerson)}</span></span>
                                 ) : (
-                                    <span className={Math.abs(exactRemaining) > 0.01 ? 'text-rose-500' : 'text-emerald-500'}>
-                                        未分配: <span className="text-lg">{Math.abs(exactRemaining) > 0.01 ? exactRemaining.toFixed(0) : '0'}</span> {form.currency}
+                                    <span className={Math.abs(exactRemaining) > 2 ? 'text-rose-500' : 'text-emerald-500'}>
+                                        未分配: <span className="text-lg">{Math.abs(exactRemaining) > 0.01 ? exactRemaining.toFixed(1) : '0'}</span> {form.currency}
                                     </span>
                                 )}
                             </div>
@@ -721,7 +752,7 @@
 
                             {(() => {
                                 // 初始化所有成員數據
-                                const users = { 'me': { id: 'me', name: '我自己', paid: 0, shouldPay: 0 } };
+                                const users = { 'me': { id: 'me', name: myName, paid: 0, shouldPay: 0 } };
                                 friends.forEach(f => users[f.id] = { id: f.id, name: f.name, paid: 0, shouldPay: 0 });
 
                                 // 過濾當前階段/日期的帳目
@@ -743,6 +774,9 @@
                                         </div>
                                     );
                                 }
+
+                                // 計算這個畫面的「總花費」
+                                const totalPhaseExpense = currentExpenses.reduce((sum, exp) => sum + (exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD), 0);
 
                                 // 累加代墊總額與應分攤總額
                                 currentExpenses.forEach(exp => {
@@ -774,21 +808,27 @@
                                 }
 
                                 const others = balances.filter(b => b.id !== center.id);
+                                
+                                // 修復結算加總誤差：強制結算中心的數字為其他人淨值的完美反向平衡
+                                const othersNetSum = others.reduce((sum, b) => sum + b.net, 0);
+                                center.net = -othersNetSum;
 
                                 return (
                                     <div className="animate-fade-in">
                                         {/* 結算中心資訊卡片 */}
                                         <div className={`rounded-2xl p-5 text-white shadow-lg mb-6 ${phase === 'pre' ? 'bg-amber-600' : 'bg-emerald-600'}`}>
                                             <div className="flex justify-between items-center mb-4">
-                                                <span className="text-xs font-bold text-white/80 uppercase tracking-widest">{phase === 'pre' ? '行前' : '本日'}結算中心</span>
-                                                <span className="bg-black/20 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-sm border border-white/10">代墊: {formatMoney(center.paid)}</span>
+                                                <div></div>
+                                                <span className="bg-black/20 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-sm border border-white/10">
+                                                    {phase === 'pre' ? '行前花費總額：' : '本日花費總額：'} {formatMoney(totalPhaseExpense)}
+                                                </span>
                                             </div>
                                             <div className="flex items-center gap-4">
                                                 <div className="w-14 h-14 rounded-full bg-white text-primary-800 font-black flex items-center justify-center text-xl shadow-inner flex-shrink-0">
-                                                    {center.id === 'me' ? '我' : center.name[0]}
+                                                    {center.id === 'me' ? (myName || '我')[0] : (center.name || '某')[0]}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="text-2xl font-black truncate">{center.name}</div>
+                                                    <div className="text-2xl font-black truncate">{center.id === 'me' ? myName : center.name}</div>
                                                     <div className="text-sm text-white/90 mt-1 font-medium">
                                                         {center.net < 0 ? `扣除自身花費後，將收回 ${formatMoney(Math.abs(center.net))}` : 
                                                          center.net > 0 ? `扣除代墊後，仍需付給他人 ${formatMoney(center.net)}` : '自身花費與代墊剛好打平'}
@@ -797,13 +837,13 @@
                                             </div>
                                         </div>
 
-                                        <h3 className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-3 pl-1">結算明細 (多退少補)</h3>
+                                        <h3 className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-3 pl-1">結算明細</h3>
                                         <div className="space-y-3">
                                             {others.map(b => (
                                                 <div key={b.id} className="bg-white border border-primary-100 rounded-2xl p-4 flex items-center justify-between shadow-sm">
                                                     <div className="flex items-center gap-3 min-w-0 pr-2">
-                                                        <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-700 font-bold flex items-center justify-center flex-shrink-0 border border-primary-100">{b.id === 'me' ? '我' : b.name[0]}</div>
-                                                        <span className="font-bold text-primary-900 truncate">{b.name}</span>
+                                                        <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-700 font-bold flex items-center justify-center flex-shrink-0 border border-primary-100">{b.id === 'me' ? (myName || '我')[0] : (b.name || '某')[0]}</div>
+                                                        <span className="font-bold text-primary-900 truncate">{b.id === 'me' ? myName : b.name}</span>
                                                     </div>
                                                     <div className="text-right flex-shrink-0">
                                                         {b.net > 0 ? (
@@ -872,7 +912,6 @@
                                 <h1 className="text-2xl font-black text-primary-900 tracking-tight">旅遊分帳</h1>
                             </div>
                             
-                            {/* 新增的結算按鈕 */}
                             <button onClick={() => setView('summary')} className="flex items-center gap-1.5 bg-primary-100 text-primary-700 px-3 py-1.5 rounded-full font-bold text-sm hover:bg-primary-200 transition active:scale-95 shadow-sm">
                                 <Icon name="FileInvoiceDollar" size={14} />
                                 結算清單
@@ -886,7 +925,7 @@
 
                     <div className="p-4 space-y-4">
                         <div className="animate-fade-in">
-                            {/* Trip 日期選單與當日總額 (同行排版，日期寬度固定) */}
+                            {/* Trip 日期選單與當日總額 */}
                             {phase === 'trip' && (
                                 tripDates.length > 0 ? (
                                     <div className="bg-white p-3 rounded-2xl border border-primary-100 shadow-sm mb-4 flex justify-between items-center gap-3">
@@ -934,7 +973,7 @@
                                                             <div className="font-bold text-primary-800 text-[16px] leading-snug break-words">{exp.title}</div>
                                                             {exp.note && <div className="text-xs text-primary-500 mt-1 line-clamp-1">{exp.note}</div>}
                                                             <div className="text-xs text-primary-400 mt-1.5 flex items-center gap-1">
-                                                                {exp.date.replace(/-/g, '/')} • {exp.paidBy === 'me' ? '我' : friends.find(f=>f.id===exp.paidBy)?.name}先付
+                                                                {exp.date.replace(/-/g, '/')} • {exp.paidBy === 'me' ? myName : friends.find(f=>f.id===exp.paidBy)?.name}先付
                                                                 {exp.splitMode === 'exact' && <span className="ml-1 bg-primary-100 text-primary-600 px-1 rounded text-[9px] font-bold">自訂分配</span>}
                                                             </div>
                                                         </div>
