@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- 防快取機制：確保 Web App 每次都抓取最新版本 -->
+    <!-- 防快取機制：確保 Web App 每次重整都抓取最新版本 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -78,6 +78,9 @@
         
         .animate-slide-in-left { animation: slideInLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+
+        .animate-slide-up { animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
         /* 避免 iOS Safari 點擊 input 或 select 時自動放大 */
         input:not(.text-4xl):not(.text-2xl):not(.text-3xl), 
@@ -205,6 +208,9 @@
             const [phase, setPhase] = useState('trip');
             const [selectedDate, setSelectedDate] = useState('');
             const [isMenuOpen, setIsMenuOpen] = useState(false); 
+            
+            // 個人結算明細 Modal 狀態
+            const [selectedDetailUserId, setSelectedDetailUserId] = useState(null);
 
             // Data State
             const [myName, setMyName] = useState(() => localStorage.getItem('tokyo_pro_my_name') || '我自己');
@@ -306,6 +312,12 @@
                 setView('addExpense');
             };
 
+            // 切換視圖時清除 Modal
+            const changeView = (newView) => {
+                setView(newView);
+                setSelectedDetailUserId(null);
+            };
+
             // Derived Data
             const currentPhaseExpenses = expenses.filter(e => e.phase === phase);
             const tripDates = useMemo(() => {
@@ -375,7 +387,7 @@
                 return (
                     <div className="max-w-2xl mx-auto min-h-screen bg-white p-6 relative pb-24 animate-fade-in">
                         <div className="flex items-center gap-3 mb-6">
-                            <button onClick={() => setView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50 transition"><Icon name="ArrowLeft"/></button>
+                            <button onClick={() => changeView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50 transition"><Icon name="ArrowLeft"/></button>
                             <h2 className="text-xl font-bold text-primary-900">匯率管理</h2>
                         </div>
                         <div className="mb-6 bg-primary-50 p-4 rounded-xl text-sm text-primary-600 leading-relaxed">
@@ -488,7 +500,7 @@
                 return (
                     <div className="max-w-2xl mx-auto min-h-screen bg-white p-6 relative pb-24">
                         <div className="flex items-center gap-3 mb-6">
-                            <button onClick={() => setView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50"><Icon name="ArrowLeft"/></button>
+                            <button onClick={() => changeView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50"><Icon name="ArrowLeft"/></button>
                             <h2 className="text-xl font-bold text-primary-900">成員管理</h2>
                         </div>
                         
@@ -570,7 +582,7 @@
                     <div className="max-w-2xl mx-auto min-h-screen bg-white flex flex-col animate-fade-in">
                         <div className="p-4 border-b border-primary-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur z-20">
                             <div className="flex items-center gap-2">
-                                <button onClick={() => setView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50"><Icon name="ArrowLeft"/></button>
+                                <button onClick={() => changeView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50"><Icon name="ArrowLeft"/></button>
                                 <h2 className="text-lg font-bold text-primary-900">{editingId ? '編輯款項' : '新增款項'}</h2>
                             </div>
                             <div className="flex items-center gap-2">
@@ -723,13 +735,13 @@
                         <div className="bg-white sticky top-0 z-20 shadow-sm border-b border-primary-100">
                             <div className="px-5 pt-6 pb-2 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <button onClick={() => setView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50 transition active:scale-95"><Icon name="ArrowLeft" size={20}/></button>
+                                    <button onClick={() => changeView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50 transition active:scale-95"><Icon name="ArrowLeft" size={20}/></button>
                                     <h2 className="text-2xl font-black text-primary-900 tracking-tight">結算清單</h2>
                                 </div>
                             </div>
                             <div className="flex px-5 pb-4 gap-4 mt-2">
-                                <button onClick={() => setPhase('pre')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${phase === 'pre' ? 'bg-amber-100 text-amber-900 shadow-inner' : 'bg-primary-50 text-primary-400 hover:bg-primary-100'}`}><Icon name="Calendar" size={16}/> 出發前</button>
-                                <button onClick={() => setPhase('trip')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${phase === 'trip' ? 'bg-emerald-100 text-emerald-900 shadow-inner' : 'bg-primary-50 text-primary-400 hover:bg-primary-100'}`}><Icon name="MapPlane" size={16}/> 旅程中</button>
+                                <button onClick={() => { setPhase('pre'); setSelectedDetailUserId(null); }} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${phase === 'pre' ? 'bg-amber-100 text-amber-900 shadow-inner' : 'bg-primary-50 text-primary-400 hover:bg-primary-100'}`}><Icon name="Calendar" size={16}/> 出發前</button>
+                                <button onClick={() => { setPhase('trip'); setSelectedDetailUserId(null); }} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${phase === 'trip' ? 'bg-emerald-100 text-emerald-900 shadow-inner' : 'bg-primary-50 text-primary-400 hover:bg-primary-100'}`}><Icon name="MapPlane" size={16}/> 旅程中</button>
                             </div>
                         </div>
 
@@ -739,7 +751,7 @@
                                     <label className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-2 block pl-1">選擇結算日期</label>
                                     {tripDates.length > 0 ? (
                                         <div className="relative">
-                                            <select value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full appearance-none bg-white border border-primary-200 p-3 rounded-xl font-bold text-primary-800 outline-none focus:border-primary-400 transition text-[16px] shadow-sm">
+                                            <select value={selectedDate} onChange={(e) => { setSelectedDate(e.target.value); setSelectedDetailUserId(null); }} className="w-full appearance-none bg-white border border-primary-200 p-3 rounded-xl font-bold text-primary-800 outline-none focus:border-primary-400 transition text-[16px] shadow-sm">
                                                 {tripDates.map(date => (<option key={date} value={date}>{date.replace(/-/g, '/')}</option>))}
                                             </select>
                                             <div className="absolute right-4 top-1/2 -translate-y-1/2 text-primary-400 pointer-events-none"><Icon name="ChevronDown" size={14} /></div>
@@ -812,11 +824,16 @@
                                 // 修復結算加總誤差：強制結算中心的數字為其他人淨值的完美反向平衡
                                 const othersNetSum = others.reduce((sum, b) => sum + b.net, 0);
                                 center.net = -othersNetSum;
+                                // 同時修復中心個人的 shouldPay 顯示，讓明細的數學算式保持完全吻合
+                                center.shouldPay = center.paid + center.net;
 
                                 return (
                                     <div className="animate-fade-in">
                                         {/* 結算中心資訊卡片 */}
-                                        <div className={`rounded-2xl p-5 text-white shadow-lg mb-6 ${phase === 'pre' ? 'bg-amber-600' : 'bg-emerald-600'}`}>
+                                        <div 
+                                            className={`rounded-2xl p-5 text-white shadow-lg mb-6 cursor-pointer transform hover:scale-[1.01] transition-all active:scale-95 ${phase === 'pre' ? 'bg-amber-600' : 'bg-emerald-600'}`}
+                                            onClick={() => setSelectedDetailUserId(center.id)}
+                                        >
                                             <div className="flex justify-between items-center mb-4">
                                                 <div></div>
                                                 <span className="bg-black/20 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-sm border border-white/10">
@@ -840,7 +857,11 @@
                                         <h3 className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-3 pl-1">結算明細</h3>
                                         <div className="space-y-3">
                                             {others.map(b => (
-                                                <div key={b.id} className="bg-white border border-primary-100 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                                                <div 
+                                                    key={b.id} 
+                                                    className="bg-white border border-primary-100 rounded-2xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:border-primary-300 hover:shadow-md transition-all active:scale-[0.98]"
+                                                    onClick={() => setSelectedDetailUserId(b.id)}
+                                                >
                                                     <div className="flex items-center gap-3 min-w-0 pr-2">
                                                         <div className="w-10 h-10 rounded-full bg-primary-50 text-primary-700 font-bold flex items-center justify-center flex-shrink-0 border border-primary-100">{b.id === 'me' ? (myName || '我')[0] : (b.name || '某')[0]}</div>
                                                         <span className="font-bold text-primary-900 truncate">{b.id === 'me' ? myName : b.name}</span>
@@ -863,6 +884,84 @@
                                                 </div>
                                             ))}
                                         </div>
+
+                                        {/* 個人明細 Modal */}
+                                        {selectedDetailUserId && (() => {
+                                            const dUser = balances.find(u => u.id === selectedDetailUserId);
+                                            if (!dUser) return null;
+                                            
+                                            // 過濾出與該用戶有關的消費（他墊付的 or 他有分攤的）
+                                            const dExpenses = currentExpenses.filter(e => e.paidBy === selectedDetailUserId || e.payerIds.includes(selectedDetailUserId));
+
+                                            return (
+                                                <div className="fixed inset-0 bg-primary-950/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onClick={() => setSelectedDetailUserId(null)}>
+                                                    <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl max-h-[85vh] flex flex-col shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
+                                                        {/* Header */}
+                                                        <div className="px-6 py-5 border-b border-primary-100 flex justify-between items-center bg-white sm:rounded-t-2xl rounded-t-3xl z-10 shrink-0">
+                                                            <div>
+                                                                <h3 className="text-xl font-black text-primary-900">{dUser.id === 'me' ? myName : dUser.name} 的明細</h3>
+                                                                <p className="text-xs text-primary-400 mt-1">{phase === 'pre' ? '出發前 (行前款)' : `${selectedDate.replace(/-/g, '/')} (當地消費)`}</p>
+                                                            </div>
+                                                            <button onClick={() => setSelectedDetailUserId(null)} className="w-8 h-8 bg-primary-50 rounded-full flex items-center justify-center text-primary-500 hover:bg-primary-100 transition"><Icon name="Xmark" size={16} /></button>
+                                                        </div>
+                                                        
+                                                        {/* 逐筆列表 */}
+                                                        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white">
+                                                            {dExpenses.length === 0 ? (
+                                                                <div className="text-center text-primary-400 py-6 text-sm font-bold">無相關消費明細</div>
+                                                            ) : (
+                                                                dExpenses.map(exp => {
+                                                                    const finalT = exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD;
+                                                                    const uPaid = exp.paidBy === selectedDetailUserId ? finalT : 0;
+                                                                    const uShare = calculateFriendShare(exp, selectedDetailUserId);
+                                                                    const uNet = uPaid - uShare; 
+                                                                    const cat = CATEGORIES.find(c => c.id === exp.category);
+                                                                    
+                                                                    return (
+                                                                        <div key={exp.id} className="bg-primary-50/50 border border-primary-100 rounded-xl p-4 flex justify-between items-center">
+                                                                            <div className="flex items-center gap-3">
+                                                                                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm text-primary-600 border border-primary-100 flex-shrink-0">
+                                                                                    <Icon name={cat?.icon || 'Other'} />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <div className="font-bold text-primary-800 text-sm leading-snug">{exp.title}</div>
+                                                                                    <div className="text-[10px] text-primary-400 mt-1 font-bold tracking-wider">總額 {formatMoney(finalT)}</div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="text-right text-xs space-y-0.5 whitespace-nowrap">
+                                                                                {uPaid > 0 && <div className="text-emerald-600 font-bold">代墊 +{formatMoney(uPaid)}</div>}
+                                                                                {uShare > 0 && <div className="text-rose-600 font-bold">應付 -{formatMoney(uShare)}</div>}
+                                                                                <div className={`font-black pt-1 mt-1 border-t border-primary-200/50 ${uNet > 0 ? 'text-emerald-600' : uNet < 0 ? 'text-rose-600' : 'text-primary-400'}`}>
+                                                                                    小計: {uNet > 0 ? '+' : ''}{formatMoney(uNet)}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    )
+                                                                })
+                                                            )}
+                                                        </div>
+                                                        
+                                                        {/* Summary Bottom */}
+                                                        <div className="p-5 border-t border-primary-100 bg-primary-50 sm:rounded-b-2xl shrink-0">
+                                                            <div className="flex justify-between items-center text-sm mb-1.5">
+                                                                <span className="text-primary-500 font-bold">當日總代墊</span>
+                                                                <span className="text-emerald-600 font-bold">+{formatMoney(dUser.paid)}</span>
+                                                            </div>
+                                                            <div className="flex justify-between items-center text-sm mb-3">
+                                                                <span className="text-primary-500 font-bold">當日總應付 (自身花費)</span>
+                                                                <span className="text-rose-600 font-bold">-{formatMoney(dUser.shouldPay)}</span>
+                                                            </div>
+                                                            <div className="flex justify-between items-center text-base pt-3 border-t border-primary-200">
+                                                                <span className="text-primary-900 font-black tracking-widest">結算淨值</span>
+                                                                <span className={`font-black text-xl ${dUser.net > 0 ? 'text-rose-600' : dUser.net < 0 ? 'text-emerald-600' : 'text-primary-500'}`}>
+                                                                    {dUser.net > 0 ? `需付 ${formatMoney(dUser.net)}` : dUser.net < 0 ? `應收回 ${formatMoney(Math.abs(dUser.net))}` : '剛好打平'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 );
                             })()}
@@ -890,11 +989,11 @@
                                     <button onClick={() => setIsMenuOpen(false)} className="text-primary-400 p-2 -mr-2 hover:bg-white rounded-full transition"><Icon name="Xmark" size={20}/></button>
                                 </div>
                                 <div className="flex-1 py-4">
-                                    <button onClick={() => { setView('settings'); setIsMenuOpen(false); }} className="w-full text-left px-6 py-4 font-bold text-primary-700 hover:bg-primary-50 flex items-center gap-4 transition text-[16px]">
+                                    <button onClick={() => { changeView('settings'); setIsMenuOpen(false); }} className="w-full text-left px-6 py-4 font-bold text-primary-700 hover:bg-primary-50 flex items-center gap-4 transition text-[16px]">
                                         <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center"><Icon name="Settings" size={16}/></div>
                                         匯率管理
                                     </button>
-                                    <button onClick={() => { setView('friends'); setIsMenuOpen(false); }} className="w-full text-left px-6 py-4 font-bold text-primary-700 hover:bg-primary-50 flex items-center gap-4 transition text-[16px]">
+                                    <button onClick={() => { changeView('friends'); setIsMenuOpen(false); }} className="w-full text-left px-6 py-4 font-bold text-primary-700 hover:bg-primary-50 flex items-center gap-4 transition text-[16px]">
                                         <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center"><Icon name="Users" size={16}/></div>
                                         成員管理
                                     </button>
@@ -912,7 +1011,7 @@
                                 <h1 className="text-2xl font-black text-primary-900 tracking-tight">旅遊分帳</h1>
                             </div>
                             
-                            <button onClick={() => setView('summary')} className="flex items-center gap-1.5 bg-primary-100 text-primary-700 px-3 py-1.5 rounded-full font-bold text-sm hover:bg-primary-200 transition active:scale-95 shadow-sm">
+                            <button onClick={() => changeView('summary')} className="flex items-center gap-1.5 bg-primary-100 text-primary-700 px-3 py-1.5 rounded-full font-bold text-sm hover:bg-primary-200 transition active:scale-95 shadow-sm">
                                 <Icon name="FileInvoiceDollar" size={14} />
                                 結算清單
                             </button>
@@ -989,7 +1088,7 @@
                             )}
                         </div>
                     </div>
-                    <button onClick={() => { setEditingId(null); setForm(prev => ({...prev, title: '', amount: '', payerIds: [], paidBy: 'me', splitMode: 'equal', exactAmounts: {}, note: ''})); setView('addExpense'); }} className={`fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-2xl text-white flex items-center justify-center active:scale-[0.85] transition-transform transform hover:scale-105 z-30 ${phase === 'pre' ? 'bg-amber-600 shadow-amber-200' : 'bg-primary-800 shadow-primary-300'}`}><Icon name="Plus" size={28} /></button>
+                    <button onClick={() => { setEditingId(null); setForm(prev => ({...prev, title: '', amount: '', payerIds: [], paidBy: 'me', splitMode: 'equal', exactAmounts: {}, note: ''})); changeView('addExpense'); }} className={`fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-2xl text-white flex items-center justify-center active:scale-[0.85] transition-transform transform hover:scale-105 z-30 ${phase === 'pre' ? 'bg-amber-600 shadow-amber-200' : 'bg-primary-800 shadow-primary-300'}`}><Icon name="Plus" size={28} /></button>
                 </div>
             );
         };
