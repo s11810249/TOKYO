@@ -310,7 +310,7 @@
                 }
             }, [form.date, form.paymentMethod, form.currency, getRateForConfig, editingId]);
 
-            // 日幣還款：自動帶入匯率並雙向更新
+            // --- 確保 useEffect 位於最外層 ---
             useEffect(() => {
                 if (repaymentForm.currency === 'JPY' && repaymentForm.refDate) {
                     const sBuy = rateConfig[repaymentForm.refDate]?.spotBuy || '';
@@ -871,13 +871,13 @@
             if (view === 'addRepayment') {
                 const isJPY = repaymentForm.currency === 'JPY';
                 
-                // 動態計算有效匯率
-                const effRate = useMemo(() => {
-                    const s = parseFloat(repaymentForm.spotBuy) || 0;
-                    const c = parseFloat(repaymentForm.cashBuy) || 0;
-                    if (s > 0 && c > 0) return s - (s - c) * 0.5;
-                    return 0;
-                }, [repaymentForm.spotBuy, repaymentForm.cashBuy]);
+                // 動態計算有效匯率 (修正 Hook 錯誤，移除用不到的 useMemo)
+                let effRate = 0;
+                const s = parseFloat(repaymentForm.spotBuy) || 0;
+                const c = parseFloat(repaymentForm.cashBuy) || 0;
+                if (s > 0 && c > 0) {
+                    effRate = s - (s - c) * 0.5;
+                }
 
                 const effectiveRateStr = effRate > 0 ? effRate.toFixed(4) : '-';
 
@@ -903,15 +903,15 @@
                 const handleManualRateChange = (field, val) => {
                     setRepaymentForm(prev => {
                         const next = { ...prev, [field]: val };
-                        const s = parseFloat(next.spotBuy) || 0;
-                        const c = parseFloat(next.cashBuy) || 0;
-                        if (s > 0 && c > 0) {
-                             const eff = s - (s - c) * 0.5;
+                        const sVal = parseFloat(next.spotBuy) || 0;
+                        const cVal = parseFloat(next.cashBuy) || 0;
+                        if (sVal > 0 && cVal > 0) {
+                             const newEff = sVal - (sVal - cVal) * 0.5;
                              // 若已有欲折抵台幣，則重新計算所需日幣
                              if (next.twdAmount) {
-                                 next.amount = Math.ceil(parseFloat(next.twdAmount) / eff).toString();
+                                 next.amount = Math.ceil(parseFloat(next.twdAmount) / newEff).toString();
                              } else if (next.amount) {
-                                 next.twdAmount = Math.round(parseFloat(next.amount) * eff).toString();
+                                 next.twdAmount = Math.round(parseFloat(next.amount) * newEff).toString();
                              }
                         }
                         return next;
