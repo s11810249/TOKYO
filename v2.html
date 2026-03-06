@@ -3,86 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- 防快取機制：確保 Web App 每次重整都抓取最新版本 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     
     <title>旅遊分帳 Pro Max</title>
     
-    <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
-    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Custom Theme Configuration -->
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
+                        // 替換為淺粉/燕麥奶柔和色系 (Pastel Warm Beige)
                         primary: {
-                            50: '#f4f7fb',
-                            100: '#e9eef5',
-                            200: '#cedce9',
-                            300: '#a2bed7',
-                            400: '#709bc0',
-                            500: '#4a78a0',
-                            600: '#3c658d',
-                            700: '#315273',
-                            800: '#2c4660',
-                            900: '#293c51',
-                            950: '#1b2736',
+                            50: '#FBF9F6',
+                            100: '#F2EBE5',
+                            200: '#E4D7CD',
+                            300: '#D2BEB0',
+                            400: '#BCA08E',
+                            500: '#A3816B',
+                            600: '#8A6853',
+                            700: '#6E503F',
+                            800: '#574032',
+                            900: '#453329',
+                            950: '#261A14',
                         },
-                        // 莫蘭迪紅 (Morandi Rose)
+                        // 莫蘭迪紅改為較輕柔的色調
                         rose: {
-                            50: '#fdfbfb',
-                            100: '#f6eeed',
-                            200: '#ebd9d6',
-                            300: '#d9bbba',
-                            400: '#c19694',
-                            500: '#a97573',
-                            600: '#8e5d5b',
-                            700: '#774c4a',
-                            800: '#63413f',
-                            900: '#533836',
-                            950: '#2b1a19',
+                            50: '#fff1f2',
+                            100: '#ffe4e6',
+                            200: '#fecdd3',
+                            300: '#fda4af',
+                            400: '#fb7185',
+                            500: '#f43f5e',
+                            600: '#e11d48',
+                            700: '#be123c',
+                            800: '#9f1239',
+                            900: '#881337',
                         },
-                        // 莫蘭迪綠 (Morandi Emerald)
+                        // 莫蘭迪綠改為較輕柔的色調
                         emerald: {
-                            50: '#f5f8f7',
-                            100: '#e5eeeb',
-                            200: '#caddd8',
-                            300: '#a3c2b8',
-                            400: '#7aa396',
-                            500: '#5b8779',
-                            600: '#466c60',
-                            700: '#3a574d',
-                            800: '#314740',
-                            900: '#2a3b36',
-                            950: '#15211e',
+                            50: '#ecfdf5',
+                            100: '#d1fae5',
+                            200: '#a7f3d0',
+                            300: '#6ee7b7',
+                            400: '#34d399',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                            800: '#065f46',
+                            900: '#064e3b',
                         },
-                        // 莫蘭迪黃 (Morandi Amber)
                         amber: {
-                            50: '#fdfcf9',
-                            100: '#f8f5ee',
-                            200: '#eee6d6',
-                            300: '#e0d1b6',
-                            400: '#cdb690',
-                            500: '#b8996b',
-                            600: '#a38156',
-                            700: '#876747',
-                            800: '#6e543b',
-                            900: '#5a4532',
-                            950: '#302318',
+                            50: '#fffbeb',
+                            100: '#fef3c7',
+                            200: '#fde68a',
+                            300: '#fcd34d',
+                            400: '#fbbf24',
+                            500: '#f59e0b',
+                            600: '#d97706',
+                            700: '#b45309',
+                            800: '#92400e',
+                            900: '#78350f',
                         }
                     },
                     fontFamily: {
@@ -95,8 +86,8 @@
     
     <style>
         body { 
-            background-color: #f4f7fb; 
-            color: #2c4660;
+            background-color: #FBF9F6; 
+            color: #574032;
             -webkit-tap-highlight-color: transparent;
         }
         .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
@@ -107,7 +98,7 @@
         .input-focus:focus-within {
             transform: translateY(-1px);
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-            border-color: #709bc0; 
+            border-color: #BCA08E; 
         }
         
         /* 動畫設定 */
@@ -244,7 +235,6 @@
             }
         };
 
-        // 輔助計算日期的函式 (用來推算 T-1 等)
         const getOffsetDateString = (dateStr, offsetDays) => {
             if (!offsetDays || offsetDays === 0) return dateStr;
             const d = new Date(dateStr);
@@ -259,27 +249,21 @@
             const [selectedDate, setSelectedDate] = useState('');
             const [isMenuOpen, setIsMenuOpen] = useState(false); 
             
-            // 個人結算與結帳 Modal 狀態
             const [selectedDetailUserId, setSelectedDetailUserId] = useState(null);
-            // 結帳明細 Tabs: 'pre' | 'trip' | 'records'
             const [detailTab, setDetailTab] = useState('pre');
             const [detailSelectedTripDate, setDetailSelectedTripDate] = useState('');
 
-            // Data State
             const [myName, setMyName] = useState(() => localStorage.getItem('tokyo_pro_my_name') || '我自己');
             const [friends, setFriends] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_friends')) || []; } catch { return []; } });
             const [expenses, setExpenses] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_expenses')) || []; } catch { return []; } });
             const [repayments, setRepayments] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_repayments')) || []; } catch { return []; } });
             const [lastRate, setLastRate] = useState(() => localStorage.getItem('tokyo_last_rate') || '0.22');
             const [rateConfig, setRateConfig] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_rates')) || {}; } catch { return {}; } });
-            
-            // 發卡組織匯率抓取規則 (0: 當天, -1: 前一日)
             const [cardRateRules, setCardRateRules] = useState(() => { 
                 try { return JSON.parse(localStorage.getItem('tokyo_pro_card_rules')) || { visa: 0, mastercard: 0, jcb: 0 }; } 
                 catch { return { visa: 0, mastercard: 0, jcb: 0 }; } 
             });
 
-            // Form State
             const [editingId, setEditingId] = useState(null);
             const [form, setForm] = useState({
                 title: '', amount: '', currency: 'TWD', rate: lastRate,
@@ -293,23 +277,18 @@
             const [newFriendName, setNewFriendName] = useState('');
             const [isFriendModalOpen, setIsFriendModalOpen] = useState(false);
             
-            // Repayment Form State (新增 twdAmount 處理雙向綁定)
             const [repaymentForm, setRepaymentForm] = useState({
                 payerId: '', payeeId: 'me', amount: '', currency: 'TWD', 
                 date: new Date().toISOString().split('T')[0], refDate: '', spotBuy: '', cashBuy: '', note: '', twdAmount: '',
                 isDateLocked: false
             });
             
-            // Rate Center Modal State
             const [isRateModalOpen, setIsRateModalOpen] = useState(false);
             const [rateForm, setRateForm] = useState({
                 date: new Date().toISOString().split('T')[0],
                 cash: '', visa: '', mastercard: '', jcb: '', spotBuy: '', cashBuy: ''
             });
 
-            // --- 所有核心運算 Hook 嚴格放置於頂層 ---
-            
-            // 1. Persistence
             useEffect(() => { localStorage.setItem('tokyo_pro_my_name', myName); }, [myName]);
             useEffect(() => { localStorage.setItem('tokyo_pro_friends', JSON.stringify(friends)); }, [friends]);
             useEffect(() => { localStorage.setItem('tokyo_pro_expenses', JSON.stringify(expenses)); }, [expenses]);
@@ -318,7 +297,6 @@
             useEffect(() => { localStorage.setItem('tokyo_pro_rates', JSON.stringify(rateConfig)); }, [rateConfig]);
             useEffect(() => { localStorage.setItem('tokyo_pro_card_rules', JSON.stringify(cardRateRules)); }, [cardRateRules]);
 
-            // 2. Auto-update rate logic based on Card Rules
             const getRateForConfig = useCallback((date, method) => {
                 let targetDate = date;
                 if (method !== 'cash' && cardRateRules[method] !== undefined) {
@@ -335,7 +313,6 @@
                 }
             }, [form.date, form.paymentMethod, form.currency, getRateForConfig, editingId]);
 
-            // 3. 日幣還款：自動帶入匯率並雙向更新
             useEffect(() => {
                 if (repaymentForm.currency === 'JPY' && repaymentForm.refDate) {
                     const sBuy = rateConfig[repaymentForm.refDate]?.spotBuy || '';
@@ -349,7 +326,6 @@
                         
                         if (parsedS > 0 && parsedC > 0) {
                              const eff = parsedS - (parsedS - parsedC) * 0.5;
-                             // 若有日幣，優先用日幣推台幣；若無日幣但有台幣，用台幣推日幣
                              if (prev.twdAmount && !prev.amount) {
                                  newJpy = Math.ceil(parseFloat(prev.twdAmount) / eff).toString();
                              } else if (prev.amount) {
@@ -361,8 +337,8 @@
                 }
             }, [repaymentForm.refDate, repaymentForm.currency, rateConfig]); 
 
-            // 4. Derived Data (包含所有運算 Hook)
-            const currentPhaseExpenses = useMemo(() => expenses.filter(e => e.phase === phase), [expenses, phase]);
+            // 統一排序處理：將符合條件的資料由新到舊排序
+            const currentPhaseExpenses = useMemo(() => expenses.filter(e => e.phase === phase).sort((a,b) => new Date(b.date) - new Date(a.date)), [expenses, phase]);
             
             const preDates = useMemo(() => {
                 const preExps = expenses.filter(e => e.phase === 'pre');
@@ -401,7 +377,6 @@
                 }, 0);
             }, [selectedDateExpenses]);
 
-            // --- Handlers ---
             const handleEdit = useCallback((exp) => {
                 setEditingId(exp.id);
                 setForm({
@@ -503,8 +478,7 @@
                 }
             };
 
-
-            // --- View: Settings (Exchange Rate Management) ---
+            // --- View: Settings ---
             if (view === 'settings') {
                 const handleSaveRate = () => {
                     if (!rateForm.date) return alert('請選擇日期');
@@ -547,77 +521,81 @@
                 };
 
                 return (
-                    <div className="max-w-2xl mx-auto min-h-screen bg-white p-6 relative pb-24 animate-fade-in">
-                        <div className="flex items-center gap-3 mb-6">
-                            <button onClick={() => changeView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50 transition"><Icon name="ArrowLeft"/></button>
-                            <h2 className="text-xl font-bold text-primary-900">系統與匯率設定</h2>
-                        </div>
-
-                        {/* 發卡組織規則設定 */}
-                        <div className="mb-6 space-y-3">
-                            <h3 className="font-bold text-primary-400 text-xs uppercase tracking-wider pl-1">發卡組織匯率抓取規則</h3>
-                            <div className="bg-primary-50 rounded-2xl p-4 border border-primary-100">
-                                <p className="text-xs text-primary-500 mb-3">設定記帳時，信用卡要抓取「當天」還是「前一日」的設定匯率。</p>
-                                <div className="space-y-3">
-                                    {['visa', 'mastercard', 'jcb'].map(card => (
-                                        <div key={card} className="flex justify-between items-center">
-                                            <span className="text-sm font-bold text-primary-800 uppercase w-24">{card}</span>
-                                            <div className="flex bg-white rounded-lg p-1 border border-primary-200">
-                                                <button onClick={() => setCardRateRules(prev => ({...prev, [card]: 0}))} className={`px-3 py-1 text-xs font-bold rounded-md transition ${cardRateRules[card] === 0 ? 'bg-primary-500 text-white shadow-sm' : 'text-primary-400 hover:text-primary-600'}`}>當天</button>
-                                                <button onClick={() => setCardRateRules(prev => ({...prev, [card]: -1}))} className={`px-3 py-1 text-xs font-bold rounded-md transition ${cardRateRules[card] === -1 ? 'bg-primary-500 text-white shadow-sm' : 'text-primary-400 hover:text-primary-600'}`}>前一日</button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                    <div className="max-w-2xl mx-auto min-h-screen bg-white relative pb-24 animate-fade-in">
+                        <div className="bg-white sticky top-0 z-10 shadow-sm border-b border-primary-100 px-5 pt-5 pb-3">
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => changeView('dashboard')} className="w-10 h-10 rounded-full flex items-center justify-center text-primary-900 hover:bg-primary-100 transition active:scale-95 -ml-2">
+                                    <Icon name="ArrowLeft" size={24}/>
+                                </button>
+                                <h1 className="text-2xl font-black text-primary-900 tracking-tight">系統與匯率設定</h1>
                             </div>
                         </div>
-                        
-                        <div className="space-y-2">
-                            <h3 className="font-bold text-primary-400 text-xs uppercase tracking-wider pl-1">已設定日期匯率</h3>
-                            <div className="bg-white border border-primary-200 rounded-xl overflow-hidden shadow-sm">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left border-collapse min-w-[380px]">
-                                        <thead>
-                                            <tr className="bg-primary-50 text-primary-500 text-[10px] uppercase tracking-wider border-b border-primary-100">
-                                                <th className="p-3 font-bold">日期</th>
-                                                <th className="p-3 font-bold text-center">現金</th>
-                                                <th className="p-3 font-bold text-center">VISA</th>
-                                                <th className="p-3 font-bold text-center">Master</th>
-                                                <th className="p-3 font-bold text-center">操作</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-primary-100">
-                                            {Object.keys(rateConfig).length === 0 ? (
-                                                <tr>
-                                                    <td colSpan="5" className="p-6 text-center text-primary-300 text-sm">
-                                                        暫無任何匯率設定，點擊右下角新增
-                                                    </td>
+
+                        <div className="p-6">
+                            <div className="mb-6 space-y-3">
+                                <h3 className="font-bold text-primary-400 text-xs uppercase tracking-wider pl-1">發卡組織匯率抓取規則</h3>
+                                <div className="bg-primary-50 rounded-2xl p-4 border border-primary-100">
+                                    <p className="text-xs text-primary-500 mb-3">設定記帳時，信用卡要抓取「當天」還是「前一日」的設定匯率。</p>
+                                    <div className="space-y-3">
+                                        {['visa', 'mastercard', 'jcb'].map(card => (
+                                            <div key={card} className="flex justify-between items-center">
+                                                <span className="text-sm font-bold text-primary-800 uppercase w-24">{card}</span>
+                                                <div className="flex bg-white rounded-lg p-1 border border-primary-200">
+                                                    <button onClick={() => setCardRateRules(prev => ({...prev, [card]: 0}))} className={`px-3 py-1 text-xs font-bold rounded-md transition ${cardRateRules[card] === 0 ? 'bg-primary-500 text-white shadow-sm' : 'text-primary-400 hover:text-primary-600'}`}>當天</button>
+                                                    <button onClick={() => setCardRateRules(prev => ({...prev, [card]: -1}))} className={`px-3 py-1 text-xs font-bold rounded-md transition ${cardRateRules[card] === -1 ? 'bg-primary-500 text-white shadow-sm' : 'text-primary-400 hover:text-primary-600'}`}>前一日</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="space-y-2">
+                                <h3 className="font-bold text-primary-400 text-xs uppercase tracking-wider pl-1">已設定日期匯率</h3>
+                                <div className="bg-white border border-primary-200 rounded-xl overflow-hidden shadow-sm">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left border-collapse min-w-[380px]">
+                                            <thead>
+                                                <tr className="bg-primary-50 text-primary-500 text-[10px] uppercase tracking-wider border-b border-primary-100">
+                                                    <th className="p-3 font-bold">日期</th>
+                                                    <th className="p-3 font-bold text-center">現金</th>
+                                                    <th className="p-3 font-bold text-center">VISA</th>
+                                                    <th className="p-3 font-bold text-center">Master</th>
+                                                    <th className="p-3 font-bold text-center">操作</th>
                                                 </tr>
-                                            ) : (
-                                                Object.entries(rateConfig).sort((a,b) => new Date(b[0]) - new Date(a[0])).map(([date, rates]) => (
-                                                    <tr key={date} className="hover:bg-primary-50/50 transition">
-                                                        <td className="p-3 text-xs font-bold text-primary-800 whitespace-nowrap">
-                                                            {date.replace(/-/g, '/')}
-                                                        </td>
-                                                        <td className="p-3 text-xs font-bold text-primary-600 text-center">{rates.cash}</td>
-                                                        <td className="p-3 text-xs font-bold text-primary-600 text-center">{rates.visa}</td>
-                                                        <td className="p-3 text-xs font-bold text-primary-600 text-center">{rates.mastercard}</td>
-                                                        <td className="p-3">
-                                                            <div className="flex items-center justify-center gap-1.5">
-                                                                <button onClick={() => handleEditRate(date, rates)} className="w-7 h-7 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center hover:bg-primary-200 hover:text-primary-800 transition"><Icon name="Edit" size={12} /></button>
-                                                                <button onClick={() => handleDeleteRate(date)} className="w-7 h-7 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-100 hover:text-rose-700 transition"><Icon name="Trash2" size={12} /></button>
-                                                            </div>
+                                            </thead>
+                                            <tbody className="divide-y divide-primary-100">
+                                                {Object.keys(rateConfig).length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan="5" className="p-6 text-center text-primary-300 text-sm">
+                                                            暫無任何匯率設定，點擊右下角新增
                                                         </td>
                                                     </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                    </table>
+                                                ) : (
+                                                    Object.entries(rateConfig).sort((a,b) => new Date(b[0]) - new Date(a[0])).map(([date, rates]) => (
+                                                        <tr key={date} className="hover:bg-primary-50/50 transition">
+                                                            <td className="p-3 text-xs font-bold text-primary-800 whitespace-nowrap">
+                                                                {date.replace(/-/g, '/')}
+                                                            </td>
+                                                            <td className="p-3 text-xs font-bold text-primary-600 text-center">{rates.cash}</td>
+                                                            <td className="p-3 text-xs font-bold text-primary-600 text-center">{rates.visa}</td>
+                                                            <td className="p-3 text-xs font-bold text-primary-600 text-center">{rates.mastercard}</td>
+                                                            <td className="p-3">
+                                                                <div className="flex items-center justify-center gap-1.5">
+                                                                    <button onClick={() => handleEditRate(date, rates)} className="w-7 h-7 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center hover:bg-primary-200 hover:text-primary-800 transition"><Icon name="Edit" size={12} /></button>
+                                                                    <button onClick={() => handleDeleteRate(date)} className="w-7 h-7 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-100 hover:text-rose-700 transition"><Icon name="Trash2" size={12} /></button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* FAB 新增按鈕 */}
                         <button onClick={() => {
                             setRateForm({ date: new Date().toISOString().split('T')[0], cash: '', visa: '', mastercard: '', jcb: '', spotBuy: '', cashBuy: '' });
                             setIsRateModalOpen(true);
@@ -625,7 +603,6 @@
                             <Icon name="Plus" size={28} />
                         </button>
 
-                        {/* 匯率懸浮視窗 (Modal) */}
                         {isRateModalOpen && (
                             <div className="fixed inset-0 bg-primary-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto pt-10 pb-10">
                                 <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl">
@@ -687,17 +664,20 @@
                 );
             }
 
-            // --- View: Friends (List) ---
+            // --- View: Friends ---
             if (view === 'friends') {
                 return (
-                    <div className="max-w-2xl mx-auto min-h-screen bg-white p-6 relative pb-24">
-                        <div className="flex items-center gap-3 mb-6">
-                            <button onClick={() => changeView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50"><Icon name="ArrowLeft"/></button>
-                            <h2 className="text-xl font-bold text-primary-900">成員管理</h2>
+                    <div className="max-w-2xl mx-auto min-h-screen bg-white relative pb-24 animate-fade-in">
+                        <div className="bg-white sticky top-0 z-10 shadow-sm border-b border-primary-100 px-5 pt-5 pb-3">
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => changeView('dashboard')} className="w-10 h-10 rounded-full flex items-center justify-center text-primary-900 hover:bg-primary-100 transition active:scale-95 -ml-2">
+                                    <Icon name="ArrowLeft" size={24}/>
+                                </button>
+                                <h1 className="text-2xl font-black text-primary-900 tracking-tight">成員管理</h1>
+                            </div>
                         </div>
                         
-                        <div className="space-y-4">
-                            {/* 自訂我的名稱 */}
+                        <div className="p-6 space-y-4">
                             <div className="p-4 border border-primary-200 rounded-xl bg-primary-50 shadow-sm transition">
                                 <label className="text-xs font-bold text-primary-400 block mb-2">你的顯示名稱 (主揪)</label>
                                 <div className="flex items-center gap-3">
@@ -731,12 +711,10 @@
                             )}
                         </div>
 
-                        {/* FAB 新增成員按鈕 */}
                         <button onClick={() => setIsFriendModalOpen(true)} className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-md bg-primary-800 text-white flex items-center justify-center active:scale-90 transition transform hover:scale-105 z-30">
                             <Icon name="Plus" size={28} />
                         </button>
 
-                        {/* 新增成員懸浮視窗 (Modal) */}
                         {isFriendModalOpen && (
                             <div className="fixed inset-0 bg-primary-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
                                 <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl">
@@ -766,7 +744,6 @@
                 const { finalTotal, perPerson } = calculateSplit({...form, baseTWD}, friends);
                 const allIds = ['me', ...friends.map(f => f.id)];
                 
-                // 動態計算手動輸入時剩餘的未分配金額
                 const exactSum = form.payerIds.reduce((acc, id) => acc + parseFloat(form.exactAmounts[id] || 0), 0);
                 const exactRemaining = parseFloat(form.amount || 0) - exactSum;
 
@@ -774,11 +751,13 @@
                     <div className="max-w-2xl mx-auto min-h-screen bg-white flex flex-col animate-fade-in">
                         <div className="p-4 border-b border-primary-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur z-20">
                             <div className="flex items-center gap-2">
-                                <button onClick={() => changeView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50"><Icon name="ArrowLeft"/></button>
-                                <h2 className="text-lg font-bold text-primary-900">{editingId ? '編輯款項' : '新增款項'}</h2>
+                                <button onClick={() => changeView('dashboard')} className="w-10 h-10 rounded-full flex items-center justify-center text-primary-900 hover:bg-primary-100 transition active:scale-95 -ml-2">
+                                    <Icon name="ArrowLeft" size={24}/>
+                                </button>
+                                <h1 className="text-2xl font-black text-primary-900 tracking-tight">{editingId ? '編輯款項' : '新增款項'}</h1>
                             </div>
                             <div className="flex items-center gap-2">
-                                {editingId && <button onClick={() => handleDeleteExpense(editingId)} className="p-2 text-accent-500 hover:bg-red-50 rounded-full transition"><Icon name="Trash2" size={18} /></button>}
+                                {editingId && <button onClick={() => handleDeleteExpense(editingId)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-full transition"><Icon name="Trash2" size={18} /></button>}
                                 <div className={`px-3 py-1 rounded-full text-xs font-bold ${phase === 'pre' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>{phase === 'pre' ? '出發前' : '旅程中'}</div>
                             </div>
                         </div>
@@ -850,7 +829,6 @@
                             
                             <hr className="border-primary-100" />
                             
-                            {/* 分攤設定 */}
                             <div className="grid grid-cols-1 gap-5">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="relative">
@@ -881,12 +859,10 @@
                                         {form.splitMode === 'equal' && <button onClick={() => setForm({...form, payerIds: form.payerIds.length === allIds.length ? [] : allIds})} className="text-xs font-bold text-primary-600 bg-primary-50 px-2 py-1 rounded-md">全選 / 取消</button>}
                                     </div>
                                     
-                                    {/* 均分模式介面 */}
                                     {form.splitMode === 'equal' && (
                                         <div className="grid grid-cols-2 gap-2">{allIds.map(id => { const name = id === 'me' ? myName : friends.find(f => f.id === id)?.name; return (<button key={id} onClick={() => { const newIds = form.payerIds.includes(id) ? form.payerIds.filter(pid => pid !== id) : [...form.payerIds, id]; setForm({...form, payerIds: newIds}); }} className={`p-2 rounded-lg flex items-center gap-2 border transition ${form.payerIds.includes(id) ? 'bg-white border-primary-500 text-primary-800 font-bold shadow-sm' : 'bg-transparent border-transparent text-primary-300'}`}><div className={`w-4 h-4 rounded-full flex items-center justify-center ${form.payerIds.includes(id) ? 'bg-primary-500 text-white' : 'bg-primary-200'}`}><Icon name="Check" size={10}/></div>{name}</button>) })}</div>
                                     )}
 
-                                    {/* 個別輸入模式介面 */}
                                     {form.splitMode === 'exact' && (
                                         <div className="space-y-2">
                                             <div className="text-[10px] text-primary-400 mb-2">請輸入不含手續費的 {form.currency} 金額 (手續費系統會按比例附加)</div>
@@ -914,7 +890,6 @@
                                 
                                 <hr className="border-primary-100 mt-2" />
                                 
-                                {/* 備註放置在最底下 */}
                                 <div>
                                     <label className="text-xs font-bold text-primary-400 block mb-1">備註 (選填)</label>
                                     <textarea 
@@ -944,11 +919,10 @@
                 );
             }
 
-            // --- View: Add Repayment (新增雙向匯率還款紀錄) ---
+            // --- View: Add Repayment ---
             if (view === 'addRepayment') {
                 const isJPY = repaymentForm.currency === 'JPY';
                 
-                // 動態計算有效匯率
                 let effRate = 0;
                 const s = parseFloat(repaymentForm.spotBuy) || 0;
                 const c = parseFloat(repaymentForm.cashBuy) || 0;
@@ -958,7 +932,6 @@
 
                 const effectiveRateStr = effRate > 0 ? effRate.toFixed(4) : '-';
 
-                // 處理上方主要金額變更 (若為 JPY，則是使用者輸入日幣)
                 const handleMainAmountChange = (e) => {
                     const val = e.target.value;
                     if (isJPY) {
@@ -969,14 +942,12 @@
                     }
                 };
 
-                // 處理下方折抵台幣變更 (使用者輸入台幣，反推需要多少日幣)
                 const handleTwdAmountChange = (e) => {
                     const val = e.target.value;
                     const jpy = (val && effRate > 0) ? Math.ceil(parseFloat(val) / effRate).toString() : '';
                     setRepaymentForm(prev => ({ ...prev, twdAmount: val, amount: jpy }));
                 };
 
-                // 處理匯率手動修改
                 const handleManualRateChange = (field, val) => {
                     setRepaymentForm(prev => {
                         const next = { ...prev, [field]: val };
@@ -984,7 +955,6 @@
                         const cVal = parseFloat(next.cashBuy) || 0;
                         if (sVal > 0 && cVal > 0) {
                              const newEff = sVal - (sVal - cVal) * 0.5;
-                             // 若已有欲折抵台幣，則重新計算所需日幣
                              if (next.twdAmount) {
                                  next.amount = Math.ceil(parseFloat(next.twdAmount) / newEff).toString();
                              } else if (next.amount) {
@@ -997,9 +967,13 @@
 
                 return (
                     <div className="max-w-2xl mx-auto min-h-screen bg-white flex flex-col animate-fade-in">
-                        <div className="p-4 border-b border-primary-100 flex items-center gap-3 sticky top-0 bg-white/95 backdrop-blur z-20">
-                            <button onClick={() => changeView('checkoutDetail')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50"><Icon name="ArrowLeft"/></button>
-                            <h2 className="text-lg font-bold text-primary-900">新增收支紀錄</h2>
+                        <div className="bg-white sticky top-0 z-10 shadow-sm border-b border-primary-100 px-5 pt-5 pb-3">
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => changeView('checkoutDetail')} className="w-10 h-10 rounded-full flex items-center justify-center text-primary-900 hover:bg-primary-100 transition active:scale-95 -ml-2">
+                                    <Icon name="ArrowLeft" size={24}/>
+                                </button>
+                                <h1 className="text-2xl font-black text-primary-900 tracking-tight">新增收支紀錄</h1>
+                            </div>
                         </div>
                         <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-32">
                             <div><label className="text-xs font-bold text-primary-400 block mb-1">記錄日期</label><input type="date" value={repaymentForm.date} onChange={e => setRepaymentForm({...repaymentForm, date: e.target.value})} className="w-full appearance-none block bg-primary-50 p-3 rounded-xl font-bold text-primary-800 outline-none text-[16px] text-center" /></div>
@@ -1053,7 +1027,6 @@
                                 </div>
                             </div>
 
-                            {/* 日幣專屬：雙向基準日選擇與匯差計算 */}
                             {isJPY && (
                                 <div className="bg-amber-50 rounded-2xl p-5 border border-amber-100 space-y-4 animate-fade-in">
                                     <div className="flex justify-between items-center mb-2">
@@ -1139,15 +1112,17 @@
                 );
             }
 
-            // --- View: Summary (結算清單 - 每日/階段) ---
+            // --- View: Summary ---
             if (view === 'summary') {
                 return (
                     <div className="max-w-3xl mx-auto min-h-screen bg-white flex flex-col animate-fade-in relative pb-24">
                         <div className="bg-white sticky top-0 z-20 shadow-sm border-b border-primary-100">
-                            <div className="px-5 pt-6 pb-2 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <button onClick={() => changeView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50 transition active:scale-95"><Icon name="ArrowLeft" size={20}/></button>
-                                    <h2 className="text-2xl font-black text-primary-900 tracking-tight">結算清單</h2>
+                            <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => changeView('dashboard')} className="w-10 h-10 rounded-full flex items-center justify-center text-primary-900 hover:bg-primary-100 transition active:scale-95 -ml-2">
+                                        <Icon name="ArrowLeft" size={24}/>
+                                    </button>
+                                    <h1 className="text-2xl font-black text-primary-900 tracking-tight">結算清單</h1>
                                 </div>
                             </div>
                             <div className="flex px-5 pb-4 gap-4 mt-2">
@@ -1158,7 +1133,6 @@
 
                         <div className="p-4 space-y-4">
                             {(() => {
-                                // 檢查是否無旅程消費日期
                                 if (phase === 'trip' && (!selectedDate || tripDates.length === 0)) {
                                     return (
                                         <div className="text-center py-12 animate-fade-in">
@@ -1168,16 +1142,13 @@
                                     );
                                 }
 
-                                // 初始化所有成員數據
                                 const users = { 'me': { id: 'me', name: myName, paid: 0, shouldPay: 0 } };
                                 friends.forEach(f => users[f.id] = { id: f.id, name: f.name, paid: 0, shouldPay: 0 });
 
-                                // 過濾當前階段/日期的帳目
                                 const currentExpenses = phase === 'pre' 
                                     ? expenses.filter(e => e.phase === 'pre') 
                                     : expenses.filter(e => e.phase === 'trip' && e.date === selectedDate);
 
-                                // 若該階段/該日沒有任何帳目
                                 if (currentExpenses.length === 0) {
                                     return (
                                         <div className="text-center py-12 animate-fade-in">
@@ -1187,10 +1158,8 @@
                                     );
                                 }
 
-                                // 計算這個畫面的「總花費」
                                 const totalPhaseExpense = currentExpenses.reduce((sum, exp) => sum + (exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD), 0);
 
-                                // 累加代墊總額與應分攤總額
                                 currentExpenses.forEach(exp => {
                                     const finalTotal = exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD;
                                     if (users[exp.paidBy]) users[exp.paidBy].paid += finalTotal;
@@ -1199,13 +1168,11 @@
                                     });
                                 });
 
-                                // 計算每個人最後的 Net (正數代表需付錢，負數代表可拿回錢)
                                 const balances = Object.values(users).map(u => ({
                                     ...u,
                                     net: u.shouldPay - u.paid
                                 }));
 
-                                // 決定結算中心
                                 let center;
                                 if (phase === 'pre') {
                                     center = balances.find(b => b.id === 'me');
@@ -1214,13 +1181,10 @@
                                 }
 
                                 const others = balances.filter(b => b.id !== center.id);
-                                
-                                // 修復結算加總誤差：強制結算中心的數字為其他人淨值的完美反向平衡
                                 const othersNetSum = others.reduce((sum, b) => sum + b.net, 0);
                                 center.net = -othersNetSum;
                                 center.shouldPay = center.paid + center.net;
 
-                                // 讓「我」排在第一個，後續依序排列其他人
                                 const displayBalances = [
                                     balances.find(b => b.id === 'me'),
                                     ...balances.filter(b => b.id !== 'me')
@@ -1228,7 +1192,6 @@
 
                                 return (
                                     <div className="animate-fade-in">
-                                        {/* 結算總額區塊 (採用與 Dashboard 相同的緊湊版型) */}
                                         {phase === 'trip' ? (
                                             <div className="bg-white p-3 rounded-2xl border border-primary-100 shadow-sm mb-4 flex justify-between items-center gap-3">
                                                 <div className="relative w-[150px] flex-shrink-0">
@@ -1326,7 +1289,7 @@
                 );
             }
 
-            // --- View: Checkout List (收付款總紀錄) ---
+            // --- View: Checkout List ---
             if (view === 'checkoutList') {
                 const users = { 'me': { id: 'me', name: myName }, ...friends.reduce((acc, f) => ({...acc, [f.id]: f}), {}) };
                 Object.keys(users).forEach(id => {
@@ -1361,12 +1324,12 @@
 
                 return (
                     <div className="max-w-3xl mx-auto min-h-screen bg-white flex flex-col animate-fade-in relative pb-24">
-                        <div className="bg-white sticky top-0 z-20 shadow-sm border-b border-primary-100">
-                            <div className="px-5 py-5 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <button onClick={() => changeView('summary')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50 transition active:scale-95"><Icon name="ArrowLeft" size={20}/></button>
-                                    <h2 className="text-xl font-black text-primary-900">總收支名單</h2>
-                                </div>
+                        <div className="bg-white sticky top-0 z-20 shadow-sm border-b border-primary-100 px-5 pt-5 pb-3">
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => changeView('summary')} className="w-10 h-10 rounded-full flex items-center justify-center text-primary-900 hover:bg-primary-100 transition active:scale-95 -ml-2">
+                                    <Icon name="ArrowLeft" size={24}/>
+                                </button>
+                                <h1 className="text-2xl font-black text-primary-900 tracking-tight">總收支名單</h1>
                             </div>
                         </div>
 
@@ -1410,7 +1373,7 @@
                 );
             }
 
-            // --- View: Checkout Detail (個人詳細結帳頁) ---
+            // --- View: Checkout Detail ---
             if (view === 'checkoutDetail') {
                 if (!selectedDetailUserId) { setView('checkoutList'); return null; }
 
@@ -1425,7 +1388,6 @@
                 let repaidOut = 0;
                 let repaidIn = 0;
                 
-                // 計算總計用
                 expenses.forEach(exp => {
                     const finalTotal = exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD;
                     if (exp.paidBy === userId) totalPaid += finalTotal;
@@ -1439,10 +1401,9 @@
 
                 const globalNet = totalExpenseDebt - totalPaid - repaidOut + repaidIn;
 
-                // 準備過濾用的明細資料
-                const preExps = expenses.filter(e => e.phase === 'pre' && (e.paidBy === userId || e.payerIds.includes(userId)));
-                const tripExps = expenses.filter(e => e.phase === 'trip' && (e.paidBy === userId || e.payerIds.includes(userId)));
-                
+                // 排序：確保明細都是由新到舊
+                const preExps = expenses.filter(e => e.phase === 'pre' && (e.paidBy === userId || e.payerIds.includes(userId))).sort((a,b) => new Date(b.date) - new Date(a.date));
+                const tripExps = expenses.filter(e => e.phase === 'trip' && (e.paidBy === userId || e.payerIds.includes(userId))).sort((a,b) => new Date(b.date) - new Date(a.date));
                 const filteredTripExps = tripExps.filter(e => e.date === detailSelectedTripDate);
 
                 const getTabDailyTotal = (exps) => {
@@ -1469,17 +1430,16 @@
 
                 return (
                     <div className="max-w-3xl mx-auto min-h-screen bg-primary-50 flex flex-col animate-fade-in relative pb-10">
-                        <div className="bg-primary-50 sticky top-0 z-20">
-                            <div className="px-5 py-5 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <button onClick={() => changeView('checkoutList')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-100 transition active:scale-95"><Icon name="ArrowLeft" size={20}/></button>
-                                    <h2 className="text-xl font-black text-primary-900">{userObj.name} 的收支紀錄</h2>
-                                </div>
+                        <div className="bg-primary-50 sticky top-0 z-20 px-5 pt-5 pb-3">
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => changeView('checkoutList')} className="w-10 h-10 rounded-full flex items-center justify-center text-primary-900 hover:bg-primary-100 transition active:scale-95 -ml-2">
+                                    <Icon name="ArrowLeft" size={24}/>
+                                </button>
+                                <h1 className="text-2xl font-black text-primary-900 tracking-tight">{userObj.name} 的收支紀錄</h1>
                             </div>
                         </div>
 
                         <div className="px-5 space-y-6">
-                            {/* 總結大卡片 - 簡約現代白底設計 */}
                             <div className="bg-white rounded-3xl p-6 shadow-sm border border-primary-100">
                                 <div className="flex justify-between items-center mb-3">
                                     <div className="text-primary-400 text-xs font-bold uppercase tracking-widest">最終結算淨值</div>
@@ -1494,7 +1454,6 @@
                                 </div>
                             </div>
 
-                            {/* Tabs 頁籤切換 */}
                             <div className="flex bg-white/50 p-1.5 rounded-2xl border border-primary-100 shadow-sm backdrop-blur-sm">
                                 <button onClick={() => setDetailTab('pre')} className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold transition-all duration-200 ${detailTab === 'pre' ? 'bg-white text-primary-800 shadow scale-[1.02]' : 'text-primary-400 hover:text-primary-600'}`}>
                                     出發前明細
@@ -1533,26 +1492,39 @@
                                     )}
 
                                     {preExps.length > 0 && (
-                                        <div className="bg-white rounded-3xl p-3 shadow-sm border border-primary-100">
+                                        <div className="space-y-3">
                                             {preExps.map(exp => {
                                                 const finalT = exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD;
                                                 const uPaid = exp.paidBy === userId ? finalT : 0;
                                                 const uShare = calculateFriendShare(exp, userId);
-                                                const uNet = uShare - uPaid; // 這裡以「應付」為正
+                                                const uNet = uShare - uPaid; 
                                                 const cat = CATEGORIES.find(c => c.id === exp.category);
+                                                const payerName = exp.paidBy === 'me' ? myName : (friends.find(f => f.id === exp.paidBy)?.name || '未知');
+                                                const paidForOthers = finalT - uShare;
                                                 
                                                 return (
-                                                    <div key={exp.id} className="flex justify-between items-center p-4 hover:bg-primary-50 rounded-2xl transition cursor-pointer" onClick={() => handleEdit(exp)}>
-                                                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                                                            <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center shadow-inner text-amber-600 flex-shrink-0">
+                                                    <div key={exp.id} className="flex justify-between items-start p-4 bg-white rounded-2xl border border-primary-100 shadow-sm">
+                                                        <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
+                                                            <div className="w-10 h-10 rounded-full bg-primary-50 flex items-center justify-center shadow-inner text-primary-600 flex-shrink-0 mt-0.5">
                                                                 <Icon name={cat?.icon || 'Other'} size={16} />
                                                             </div>
-                                                            <div className="flex-1 min-w-0 pr-2">
-                                                                <div className="font-bold text-primary-900 text-[15px] truncate">{exp.title}</div>
-                                                                <div className="text-[11px] text-primary-400 mt-0.5">{exp.date.replace(/-/g, '/')}</div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="font-bold text-primary-900 text-[15px] whitespace-normal break-words leading-snug">{exp.title}</div>
+                                                                <div className="text-[11px] text-primary-400 mt-1">
+                                                                    {exp.date.replace(/-/g, '/')} • 由 {payerName} 代墊
+                                                                </div>
+                                                                {/* 若為墊付者，顯示個人消費與代墊明細 */}
+                                                                {exp.paidBy === userId && (
+                                                                    <div className="mt-1.5 flex flex-wrap gap-2 text-[10px] font-bold">
+                                                                        <span className="bg-primary-50 text-primary-600 px-1.5 py-0.5 rounded border border-primary-100">個人消費: {formatMoney(uShare)}</span>
+                                                                        {paidForOthers > 0 && (
+                                                                            <span className="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded border border-emerald-100">代墊他人: {formatMoney(paidForOthers)}</span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
-                                                        <div className={`font-black whitespace-nowrap flex-shrink-0 text-lg text-right ${uNet > 0 ? 'text-rose-600' : uNet < 0 ? 'text-emerald-600' : 'text-primary-400'}`}>
+                                                        <div className={`font-black whitespace-nowrap flex-shrink-0 text-lg text-right pt-0.5 ${uNet > 0 ? 'text-rose-600' : uNet < 0 ? 'text-emerald-600' : 'text-primary-400'}`}>
                                                             {uNet > 0 ? '+' : ''}{formatMoney(uNet)}
                                                         </div>
                                                     </div>
@@ -1595,25 +1567,39 @@
                                     )}
 
                                     {filteredTripExps.length > 0 && (
-                                        <div className="bg-white rounded-3xl p-3 shadow-sm border border-primary-100">
+                                        <div className="space-y-3">
                                             {filteredTripExps.map(exp => {
                                                 const finalT = exp.hasFee ? Math.round(exp.baseTWD * 1.015) : exp.baseTWD;
                                                 const uPaid = exp.paidBy === userId ? finalT : 0;
                                                 const uShare = calculateFriendShare(exp, userId);
-                                                const uNet = uShare - uPaid; // 這裡以「應付」為正
+                                                const uNet = uShare - uPaid; 
                                                 const cat = CATEGORIES.find(c => c.id === exp.category);
+                                                const payerName = exp.paidBy === 'me' ? myName : (friends.find(f => f.id === exp.paidBy)?.name || '未知');
+                                                const paidForOthers = finalT - uShare;
                                                 
                                                 return (
-                                                    <div key={exp.id} className="flex justify-between items-center p-4 hover:bg-primary-50 rounded-2xl transition cursor-pointer" onClick={() => handleEdit(exp)}>
-                                                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                                                            <div className="w-10 h-10 rounded-full bg-primary-50 flex items-center justify-center shadow-inner text-primary-600 flex-shrink-0">
+                                                    <div key={exp.id} className="flex justify-between items-start p-4 bg-white rounded-2xl border border-primary-100 shadow-sm">
+                                                        <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
+                                                            <div className="w-10 h-10 rounded-full bg-primary-50 flex items-center justify-center shadow-inner text-primary-600 flex-shrink-0 mt-0.5">
                                                                 <Icon name={cat?.icon || 'Other'} size={16} />
                                                             </div>
-                                                            <div className="flex-1 min-w-0 pr-2">
-                                                                <div className="font-bold text-primary-900 text-[15px] truncate">{exp.title}</div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="font-bold text-primary-900 text-[15px] whitespace-normal break-words leading-snug">{exp.title}</div>
+                                                                <div className="text-[11px] text-primary-400 mt-1">
+                                                                    {exp.date.replace(/-/g, '/')} • 由 {payerName} 代墊
+                                                                </div>
+                                                                {/* 若為墊付者，顯示個人消費與代墊明細 */}
+                                                                {exp.paidBy === userId && (
+                                                                    <div className="mt-1.5 flex flex-wrap gap-2 text-[10px] font-bold">
+                                                                        <span className="bg-primary-50 text-primary-600 px-1.5 py-0.5 rounded border border-primary-100">個人消費: {formatMoney(uShare)}</span>
+                                                                        {paidForOthers > 0 && (
+                                                                            <span className="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded border border-emerald-100">代墊他人: {formatMoney(paidForOthers)}</span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
-                                                        <div className={`font-black whitespace-nowrap flex-shrink-0 text-lg text-right ${uNet > 0 ? 'text-rose-600' : uNet < 0 ? 'text-emerald-600' : 'text-primary-400'}`}>
+                                                        <div className={`font-black whitespace-nowrap flex-shrink-0 text-lg text-right pt-0.5 ${uNet > 0 ? 'text-rose-600' : uNet < 0 ? 'text-emerald-600' : 'text-primary-400'}`}>
                                                             {uNet > 0 ? '+' : ''}{formatMoney(uNet)}
                                                         </div>
                                                     </div>
@@ -1727,8 +1713,8 @@
                         </div>
                     )}
 
-                    <div className="bg-white sticky top-0 z-10 shadow-sm border-b border-primary-100">
-                        <div className="px-5 pt-5 pb-3 flex items-center justify-between relative">
+                    <div className="bg-white sticky top-0 z-10 shadow-sm border-b border-primary-100 px-5 pt-5 pb-3">
+                        <div className="flex items-center justify-between relative">
                             <div className="flex items-center gap-2">
                                 <button onClick={() => setIsMenuOpen(true)} className="w-10 h-10 rounded-full flex items-center justify-center text-primary-900 hover:bg-primary-100 transition active:scale-95 -ml-2">
                                     <Icon name="Bars" size={24} />
@@ -1736,7 +1722,7 @@
                                 <h1 className="text-2xl font-black text-primary-900 tracking-tight">旅遊分帳</h1>
                             </div>
                         </div>
-                        <div className="flex px-5 pb-4 gap-4 mt-1">
+                        <div className="flex pb-1 gap-4 mt-3">
                             <button onClick={() => setPhase('pre')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${phase === 'pre' ? 'bg-amber-100 text-amber-900 shadow-inner' : 'bg-primary-50 text-primary-400 hover:bg-primary-100'}`}><Icon name="Calendar" size={16}/> 出發前 (行前款)</button>
                             <button onClick={() => setPhase('trip')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${phase === 'trip' ? 'bg-emerald-100 text-emerald-900 shadow-inner' : 'bg-primary-50 text-primary-400 hover:bg-primary-100'}`}><Icon name="MapPlane" size={16}/> 旅程中 (當地消費)</button>
                         </div>
@@ -1777,7 +1763,7 @@
                                 </div>
                             )}
 
-                            {/* 帳目列表 (整合出發前與旅程中) */}
+                            {/* 帳目列表 */}
                             {expensesToRender.length > 0 && (
                                 <div className="mt-4 bg-white rounded-2xl border border-primary-100 shadow-sm overflow-hidden animate-fade-in">
                                     <div className="divide-y divide-primary-50">
@@ -1789,10 +1775,10 @@
                                                             <Icon name={CATEGORIES.find(c=>c.id===exp.category)?.icon} />
                                                         </div>
                                                         <div className="flex-1 min-w-0">
-                                                            <div className="font-bold text-primary-800 text-[16px] leading-snug break-words">{exp.title}</div>
+                                                            <div className="font-bold text-primary-800 text-[16px] leading-snug whitespace-normal break-words">{exp.title}</div>
                                                             {exp.note && <div className="text-xs text-primary-500 mt-1 line-clamp-1">{exp.note}</div>}
                                                             <div className="text-xs text-primary-400 mt-1.5 flex items-center gap-1">
-                                                                {exp.date.replace(/-/g, '/')} • {exp.paidBy === 'me' ? myName : friends.find(f=>f.id===exp.paidBy)?.name}先付
+                                                                {exp.date.replace(/-/g, '/')} • 由 {exp.paidBy === 'me' ? myName : friends.find(f=>f.id===exp.paidBy)?.name} 代墊
                                                                 {exp.splitMode === 'exact' && <span className="ml-1 bg-primary-100 text-primary-600 px-1 rounded text-[9px] font-bold">自訂分配</span>}
                                                             </div>
                                                         </div>
