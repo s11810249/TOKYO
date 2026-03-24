@@ -162,6 +162,7 @@
                 RightLeft: 'fa-solid fa-right-left',
                 MoneyBillTransfer: 'fa-solid fa-money-bill-transfer',
                 List: 'fa-solid fa-list-ul',
+                ChartBar: 'fa-solid fa-chart-simple',
             };
 
             const faClass = iconMap[name] || 'fa-solid fa-circle-question';
@@ -242,6 +243,11 @@
             const [selectedDetailUserId, setSelectedDetailUserId] = useState(null);
             const [detailTab, setDetailTab] = useState('pre');
             const [detailSelectedTripDate, setDetailSelectedTripDate] = useState('');
+            
+            // 新增：個人開銷統計專用的 State
+            const [statsUserId, setStatsUserId] = useState('me'); 
+            const [statsStartDate, setStatsStartDate] = useState('');
+            const [statsEndDate, setStatsEndDate] = useState('');
 
             const [myName, setMyName] = useState(() => localStorage.getItem('tokyo_pro_my_name') || '我自己');
             const [friends, setFriends] = useState(() => { try { return JSON.parse(localStorage.getItem('tokyo_pro_friends')) || []; } catch { return []; } });
@@ -804,7 +810,7 @@
                             
                             <div className="grid grid-cols-1 gap-4">
                                 <div><label className="text-xs font-bold text-primary-400 block mb-1">項目名稱</label><input value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full bg-primary-50 p-3 rounded-xl font-bold text-primary-800 outline-none focus:ring-2 focus:ring-primary-400 text-[16px]" placeholder="例：敘敘苑" /></div>
-                                <div><label className="text-xs font-bold text-primary-400 block mb-2">類別</label><div className="grid grid-cols-4 gap-3">{CATEGORIES.map(cat => (<button key={cat.id} onClick={() => setForm({...form, category: cat.id})} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition ${form.category === cat.id ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-transparent bg-primary-50 text-primary-300 grayscale'}`}><Icon name={cat.icon} size={20} /><span className="text-[10px] font-bold mt-1">{cat.name}</span></button>))}</div></div>
+                                <div><label className="text-xs font-bold text-primary-400 block mb-2">類別</label><div className="grid grid-cols-4 gap-3">{CATEGORIES.map(cat => (<button key={cat.id} onClick={() => setForm({...form, category: cat.id})} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition ${form.category === cat.id ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-transparent bg-primary-50 text-primary-300 grayscale'} `}><Icon name={cat.icon} size={20} /><span className="text-[10px] font-bold mt-1">{cat.name}</span></button>))}</div></div>
                             </div>
                             
                             <hr className="border-primary-100" />
@@ -1623,6 +1629,167 @@
                 );
             }
 
+            if (view === 'stats') {
+                // 如果沒有手動設定過日期，預設抓取最後 7 天
+                const allDates = expenses.map(e => e.date).sort();
+                const defaultEndDate = allDates.length > 0 ? allDates[allDates.length - 1] : new Date().toISOString().split('T')[0];
+                
+                const defaultStartObj = new Date(defaultEndDate);
+                defaultStartObj.setDate(defaultStartObj.getDate() - 6);
+                const defaultStartDate = defaultStartObj.toISOString().split('T')[0];
+
+                const actualStartDate = statsStartDate || defaultStartDate;
+                const actualEndDate = statsEndDate || defaultEndDate;
+
+                // 篩選出這段區間內的消費
+                const recentExps = expenses.filter(e => e.date >= actualStartDate && e.date <= actualEndDate);
+
+                // 只留下選擇的這位使用者的消費額
+                const userRecentExps = recentExps.filter(exp => exp.payerIds.includes(statsUserId));
+
+                let grandTotal = 0;
+                const categoryGroups = {};
+
+                // 計算金額並依據「類別」進行分組
+                userRecentExps.forEach(exp => {
+                    const userShare = calculateFriendShare(exp, statsUserId);
+                    if (userShare <= 0) return;
+                    
+                    grandTotal += userShare;
+                    
+                    if (!categoryGroups[exp.category]) {
+                        categoryGroups[exp.category] = {
+                            id: exp.category,
+                            total: 0,
+                            items: []
+                        };
+                    }
+                    categoryGroups[exp.category].total += userShare;
+                    // 將單筆明細加入該類別
+                    categoryGroups[exp.category].items.push({
+                        ...exp,
+                        userShare
+                    });
+                });
+
+                // 將各類別內的明細，依照「日期」做升冪排序 (3/17 -> 3/18 -> 3/19)
+                Object.values(categoryGroups).forEach(group => {
+                    group.items.sort((a, b) => new Date(a.date) - new Date(b.date));
+                });
+
+                // 將所有類別轉成陣列，並依照「該類別總金額」做降冪排序 (花費多的分類排前面)
+                const sortedCategories = Object.values(categoryGroups).sort((a, b) => b.total - a.total);
+
+                return (
+                    <div className="max-w-3xl mx-auto min-h-screen bg-primary-50 flex flex-col animate-fade-in relative pb-24">
+                        <div className="bg-white sticky top-0 z-20 shadow-sm border-b border-primary-100">
+                            <div className="px-5 py-5 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <button onClick={() => changeView('dashboard')} className="p-2 -ml-2 text-primary-500 rounded-full hover:bg-primary-50 transition active:scale-95"><Icon name="ArrowLeft" size={20}/></button>
+                                    <h2 className="text-xl font-black text-primary-900">個人開銷統計</h2>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-5 space-y-5">
+                            {/* 總結卡片與篩選器 */}
+                            <div className="bg-white rounded-3xl p-6 shadow-sm border border-primary-100 relative overflow-hidden">
+                                
+                                <div className="relative z-10 mb-4">
+                                    <label className="text-[10px] font-bold text-primary-400 block mb-1 uppercase tracking-widest pl-1">切換查看成員</label>
+                                    <div className="relative">
+                                        <select 
+                                            value={statsUserId} 
+                                            onChange={(e) => setStatsUserId(e.target.value)}
+                                            className="w-full appearance-none bg-primary-50 py-3 pl-4 pr-10 rounded-xl font-bold text-primary-800 outline-none border border-transparent focus:border-primary-300 transition text-[15px] shadow-sm"
+                                        >
+                                            <option value="me">{myName} (我自己)</option>
+                                            {friends.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                        </select>
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-primary-500 pointer-events-none"><Icon name="ChevronDown" size={14} /></div>
+                                    </div>
+                                </div>
+
+                                <div className="relative z-10 mb-5">
+                                    <label className="text-[10px] font-bold text-primary-400 block mb-1 uppercase tracking-widest pl-1">自訂統計區間</label>
+                                    <div className="flex items-center gap-2">
+                                        <input 
+                                            type="date" 
+                                            value={actualStartDate} 
+                                            onChange={(e) => setStatsStartDate(e.target.value)}
+                                            className="flex-1 bg-primary-50 p-2 rounded-xl font-bold text-primary-800 outline-none border border-transparent focus:border-primary-300 transition text-[14px] text-center shadow-sm min-h-[40px]"
+                                        />
+                                        <span className="text-primary-300 font-bold">~</span>
+                                        <input 
+                                            type="date" 
+                                            value={actualEndDate} 
+                                            onChange={(e) => setStatsEndDate(e.target.value)}
+                                            className="flex-1 bg-primary-50 p-2 rounded-xl font-bold text-primary-800 outline-none border border-transparent focus:border-primary-300 transition text-[14px] text-center shadow-sm min-h-[40px]"
+                                        />
+                                    </div>
+                                </div>
+                                
+                                <div className="relative z-10 border-t border-primary-100 pt-5">
+                                    <div className="text-xs font-bold text-primary-400 mb-1">區間總花費 (個人應付額)</div>
+                                    <div className="text-4xl font-black text-primary-800 tracking-tight">{formatMoney(grandTotal)}</div>
+                                </div>
+                                
+                                <Icon name="ChartBar" size={140} className="absolute -bottom-8 -right-6 text-primary-50 opacity-60 pointer-events-none" />
+                            </div>
+
+                            {/* 各分類詳細清單 */}
+                            {sortedCategories.length === 0 ? (
+                                <div className="text-center py-10 bg-white rounded-3xl border border-primary-100 border-dashed shadow-sm">
+                                    <div className="w-12 h-12 bg-primary-50 text-primary-300 rounded-full flex items-center justify-center mx-auto mb-3"><Icon name="ChartBar" size={20} /></div>
+                                    <p className="text-primary-400 font-bold text-sm">這段期間內目前無個人消費紀錄</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {sortedCategories.map(cat => {
+                                        const categoryInfo = CATEGORIES.find(c => c.id === cat.id) || { name: '未知', icon: 'Other' };
+                                        
+                                        return (
+                                            <div key={cat.id} className="bg-white rounded-2xl border border-primary-100 shadow-sm overflow-hidden animate-fade-in">
+                                                {/* 分類標頭 */}
+                                                <div className="p-4 bg-primary-50/60 border-b border-primary-100 flex justify-between items-center">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-9 h-9 rounded-full bg-white shadow-sm text-primary-600 flex items-center justify-center">
+                                                            <Icon name={categoryInfo.icon} size={16} />
+                                                        </div>
+                                                        <span className="font-bold text-primary-900 text-lg">{categoryInfo.name}</span>
+                                                    </div>
+                                                    <div className="font-black text-xl text-primary-800">
+                                                        {formatMoney(cat.total)}
+                                                    </div>
+                                                </div>
+                                                {/* 分類內的項目清單 */}
+                                                <div className="divide-y divide-primary-50">
+                                                    {cat.items.map(item => (
+                                                        <div key={item.id} className="p-3.5 px-4 flex justify-between items-center hover:bg-primary-50 transition cursor-pointer" onClick={() => handleEdit(item)}>
+                                                            <div className="flex-1 min-w-0 pr-4">
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-[11px] font-bold text-primary-400 bg-primary-50 px-2 py-0.5 rounded-md flex-shrink-0 border border-primary-100">
+                                                                        {item.date.slice(5).replace('-', '/')}
+                                                                    </span>
+                                                                    <span className="text-[15px] font-bold text-primary-800 truncate">{item.title}</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="font-bold text-primary-600 text-[15px] flex-shrink-0">
+                                                                {formatMoney(item.userShare)}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            }
+
             const expensesToRender = phase === 'pre' ? currentPhaseExpenses : selectedDateExpenses;
 
             return (
@@ -1645,6 +1812,10 @@
                                     <button onClick={() => { changeView('checkoutList'); setIsMenuOpen(false); }} className="w-full text-left px-6 py-3.5 font-bold text-primary-800 hover:bg-primary-50 flex items-center gap-4 transition text-[16px]">
                                         <div className="w-9 h-9 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center"><Icon name="Wallet" size={16}/></div>
                                         收付款紀錄
+                                    </button>
+                                    <button onClick={() => { changeView('stats'); setIsMenuOpen(false); }} className="w-full text-left px-6 py-3.5 font-bold text-primary-800 hover:bg-primary-50 flex items-center gap-4 transition text-[16px]">
+                                        <div className="w-9 h-9 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center"><Icon name="ChartBar" size={16}/></div>
+                                        個人開銷統計
                                     </button>
                                     <hr className="my-2 border-primary-100 mx-6"/>
                                     <button onClick={() => { changeView('settings'); setIsMenuOpen(false); }} className="w-full text-left px-6 py-3.5 font-bold text-primary-800 hover:bg-primary-50 flex items-center gap-4 transition text-[16px]">
